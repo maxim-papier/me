@@ -367,6 +367,8 @@ body.page-project :focus-visible {
   border-radius: 4px;
   transform: scale(0.95);
   transition: transform 0.3s ease, opacity 0.25s ease;
+  position: relative;
+  z-index: 0;
 }
 
 .lightbox--open .lightbox__img {
