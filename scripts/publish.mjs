@@ -10,9 +10,13 @@
  * Usage: node scripts/publish.mjs
  */
 
-import { readdir, mkdir, unlink, readFile, writeFile, rmdir, stat } from "node:fs/promises";
+import { readdir, mkdir, unlink, writeFile, rmdir, stat } from "node:fs/promises";
 import { join, parse } from "node:path";
 import sharp from "sharp";
+
+function isSafeDirName(name) {
+  return /^[@a-zA-Z0-9_-]+$/.test(name);
+}
 
 const INBOX = "inbox";
 const IMAGES_ROOT = "assets/images";
@@ -68,7 +72,7 @@ async function dirExists(path) {
   }
 }
 
-async function uniqueSlug(slug, usedSlugs) {
+function uniqueSlug(slug, usedSlugs) {
   if (!usedSlugs.has(slug)) {
     usedSlugs.add(slug);
     return slug;
@@ -82,7 +86,7 @@ async function uniqueSlug(slug, usedSlugs) {
 
 async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
   const baseSlug = slugify(parse(filename).name);
-  const slug = await uniqueSlug(baseSlug, usedSlugs);
+  const slug = uniqueSlug(baseSlug, usedSlugs);
   const avifPath = join(outDir, `${slug}.avif`);
   const webpPath = join(outDir, `${slug}.webp`);
 
@@ -95,10 +99,18 @@ async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
     resized.clone().webp({ quality: WEBP_QUALITY }).toFile(webpPath),
   ]);
 
+  // Verify output before deleting source
+  const [avifStat, webpStat] = await Promise.all([stat(avifPath), stat(webpPath)]);
+  if (avifStat.size === 0 || webpStat.size === 0) {
+    throw new Error(`Output file is empty, keeping source: ${srcPath}`);
+  }
   await unlink(srcPath);
 
-  const outMeta = await sharp(avifPath).metadata();
-  console.log(`  ✓ ${filename} → ${slug}.avif/.webp (${outMeta.width}×${outMeta.height})`);
+  const outWidth = Math.min(meta.width, MAX_WIDTH);
+  const outHeight = meta.width > MAX_WIDTH
+    ? Math.round(meta.height * (MAX_WIDTH / meta.width))
+    : meta.height;
+  console.log(`  ✓ ${filename} → ${slug}.avif/.webp (${outWidth}×${outHeight})`);
   return slug;
 }
 
@@ -123,6 +135,10 @@ async function processInbox() {
   const newCategories = [];
 
   for (const projectId of projectDirs) {
+    if (!isSafeDirName(projectId)) {
+      console.warn(`\n⚠ Skipping unsafe directory name: ${projectId}`);
+      continue;
+    }
     const projectInbox = join(INBOX, projectId);
     const entries = await readdir(projectInbox, { withFileTypes: true });
     const catDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
@@ -130,9 +146,8 @@ async function processInbox() {
     // Detect new project
     const isNewProject = !PROJECT_META[projectId];
     if (isNewProject) {
-      const fileCount = await countImages(projectInbox);
-      newProjects.push({ id: projectId, categories: catDirs, fileCount });
-      console.log(`\n⚠ NEW PROJECT: ${projectId}/ (${fileCount} images in ${catDirs.length} categories: ${catDirs.join(", ")})`);
+      newProjects.push({ id: projectId, categories: catDirs });
+      console.log(`\n⚠ NEW PROJECT: ${projectId}/ (categories: ${catDirs.join(", ")})`);
       console.log(`  → Skipped. Add to PROJECT_META in publish.mjs first, or let Claude handle it.`);
       continue;
     }
@@ -140,14 +155,17 @@ async function processInbox() {
     console.log(`\n${projectId}/`);
 
     for (const cat of catDirs) {
+      if (!isSafeDirName(cat)) {
+        console.warn(`  ⚠ Skipping unsafe category name: ${cat}`);
+        continue;
+      }
       const srcDir = join(projectInbox, cat);
 
       // Detect new category
       const isNewCategory = !PROJECT_META[projectId].categoryLabels[cat];
       if (isNewCategory) {
-        const fileCount = await countImages(srcDir);
-        newCategories.push({ projectId, category: cat, fileCount });
-        console.log(`  ⚠ NEW CATEGORY: ${cat}/ (${fileCount} images) — not in PROJECT_META`);
+        newCategories.push({ projectId, category: cat });
+        console.log(`  ⚠ NEW CATEGORY: ${cat}/ — not in PROJECT_META`);
         console.log(`    → Skipped. Needs a label in PROJECT_META.categoryLabels.`);
         continue;
       }
@@ -204,7 +222,9 @@ async function processInbox() {
         }
 
         // Clean up carousel folder (temporary, unlike category folders)
-        try { await rmdir(carouselDir); } catch {}
+        try { await rmdir(carouselDir); } catch (e) {
+          if (e.code !== "ENOTEMPTY" && e.code !== "ENOENT") console.warn(`  ⚠ Could not remove ${carouselDir}: ${e.message}`);
+        }
       }
 
       // Keep category and project folders for future use
@@ -212,19 +232,6 @@ async function processInbox() {
   }
 
   return { total, newProjects, newCategories };
-}
-
-async function countImages(dir) {
-  let count = 0;
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      count += await countImages(join(dir, e.name));
-    } else if (/\.(png|jpe?g)$/i.test(e.name)) {
-      count++;
-    }
-  }
-  return count;
 }
 
 // --- Step 2: Regenerate data/projects.js from filesystem ---
@@ -337,12 +344,12 @@ if (newProjects.length > 0 || newCategories.length > 0) {
   console.log("\n" + "=".repeat(60));
   console.log("⚠ ACTION REQUIRED — items skipped:");
   for (const p of newProjects) {
-    console.log(`  NEW PROJECT: "${p.id}" (${p.fileCount} images, categories: ${p.categories.join(", ")})`);
+    console.log(`  NEW PROJECT: "${p.id}" (categories: ${p.categories.join(", ")})`);
     console.log(`    → Add entry to PROJECT_META in scripts/publish.mjs`);
     console.log(`    → Provide: name, logo path, category labels`);
   }
   for (const c of newCategories) {
-    console.log(`  NEW CATEGORY: "${c.category}" in project "${c.projectId}" (${c.fileCount} images)`);
+    console.log(`  NEW CATEGORY: "${c.category}" in project "${c.projectId}"`);
     console.log(`    → Add "${c.category}" to PROJECT_META["${c.projectId}"].categoryLabels`);
   }
   console.log("=".repeat(60));
