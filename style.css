@@ -283,16 +283,18 @@ body.page-project :focus-visible {
 
 .slide-badge {
   place-self: start end;
-  margin: 8px;
-  background: rgba(0, 0, 0, 0.65);
+  margin: 10px;
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 4px 12px;
   border-radius: 999px;
   pointer-events: none;
   z-index: 1;
   line-height: 1.4;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .masonry img {
