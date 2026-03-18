@@ -310,7 +310,7 @@ body.page-project :focus-visible {
   filter: brightness(0.6);
 }
 
-.masonry picture:hover img {
+.masonry picture:hover {
   transform: scale(1.02);
 }
 
