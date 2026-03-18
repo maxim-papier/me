@@ -326,24 +326,54 @@ function renderProject(project) {
 // --- Shared helpers ---
 
 function waitForImages(grid) {
-  const imgs = grid.querySelectorAll("img");
-  let loaded = 0;
-  const total = imgs.length;
+  const pictures = grid.querySelectorAll("picture");
 
-  if (total === 0) return;
-
-  imgs.forEach((img) => {
-    if (img.complete) {
-      loaded++;
-    } else {
-      img.addEventListener("load", () => {
-        loaded++;
-        if (loaded === total) layoutMasonry(grid);
-      });
+  // Defer src assignment — store real URLs in data attributes
+  pictures.forEach((pic) => {
+    const img = pic.querySelector("img");
+    const sources = pic.querySelectorAll("source");
+    if (img) {
+      img.dataset.src = img.src;
+      img.removeAttribute("src");
     }
+    sources.forEach((s) => {
+      s.dataset.srcset = s.srcset;
+      s.removeAttribute("srcset");
+    });
   });
 
-  if (loaded === total) layoutMasonry(grid);
+  // Load images as they enter viewport
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const pic = entry.target;
+        const img = pic.querySelector("img");
+        const sources = pic.querySelectorAll("source");
+
+        sources.forEach((s) => {
+          if (s.dataset.srcset) {
+            s.srcset = s.dataset.srcset;
+            delete s.dataset.srcset;
+          }
+        });
+
+        if (img && img.dataset.src) {
+          img.src = img.dataset.src;
+          delete img.dataset.src;
+          img.addEventListener("load", () => {
+            pic.classList.add("loaded");
+            layoutMasonry(grid);
+          });
+        }
+
+        observer.unobserve(pic);
+      });
+    },
+    { rootMargin: "200px" }
+  );
+
+  pictures.forEach((pic) => observer.observe(pic));
   window.addEventListener("resize", () => layoutMasonry(grid));
 }
 

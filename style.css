@@ -295,13 +295,16 @@ body.page-project {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Masonry images: hidden until loaded */
 .masonry picture {
-  animation: fadeIn 0.25s ease both;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-/* Stagger effect via JS: --i sets delay */
-.masonry picture {
-  animation-delay: calc(var(--i, 0) * 0.02s);
+.masonry picture.loaded {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* Lightbox */
