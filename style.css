@@ -423,8 +423,8 @@ body.page-project :focus-visible {
   border-right: 2px solid #fff;
 }
 
-.lightbox__arrow--prev { left: max(8px, calc(5vw - 56px)); }
-.lightbox__arrow--next { right: max(8px, calc(5vw - 56px)); }
+.lightbox__arrow--prev { left: -56px; }
+.lightbox__arrow--next { right: -56px; }
 
 .lightbox__arrow--prev::after {
   transform: rotate(-135deg);
@@ -507,6 +507,11 @@ body.page-project :focus-visible {
 /* Responsive */
 @media (max-width: 1200px) {
   .masonry { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .lightbox__arrow--prev { left: 8px; }
+  .lightbox__arrow--next { right: 8px; }
 }
 
 @media (max-width: 900px) {

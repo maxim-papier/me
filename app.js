@@ -436,7 +436,8 @@ function initLightbox(grid) {
   liveRegion.setAttribute("aria-live", "polite");
   liveRegion.className = "sr-only";
 
-  overlay.append(closeBtn, prevBtn, content, nextBtn, dotsNav, liveRegion);
+  content.append(prevBtn, nextBtn);
+  overlay.append(closeBtn, content, dotsNav, liveRegion);
   document.body.appendChild(overlay);
 
   // State
