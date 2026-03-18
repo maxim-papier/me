@@ -1,0 +1,18 @@
+# Source images (heavy PNGs, not for git)
+assets/portfolio/
+
+# OS
+.DS_Store
+
+# Node (for image optimization script)
+node_modules/
+package*.json
+
+# Project management
+project/
+.claude/
+
+# Dev docs
+docs/
+scripts/
+CLAUDE.md
