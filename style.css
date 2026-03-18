@@ -352,6 +352,7 @@ body.page-project :focus-visible {
 }
 
 .lightbox__content {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -422,8 +423,8 @@ body.page-project :focus-visible {
   border-right: 2px solid #fff;
 }
 
-.lightbox__arrow--prev { left: calc(5vw - 24px); }
-.lightbox__arrow--next { right: calc(5vw - 24px); }
+.lightbox__arrow--prev { left: max(8px, calc(5vw - 56px)); }
+.lightbox__arrow--next { right: max(8px, calc(5vw - 56px)); }
 
 .lightbox__arrow--prev::after {
   transform: rotate(-135deg);
