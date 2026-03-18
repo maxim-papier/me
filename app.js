@@ -447,10 +447,13 @@ function initLightbox(grid) {
   const preloaded = new Set();
 
   function getSingleSrc(pic) {
-    const source = pic.querySelector("source[type='image/avif']") || pic.querySelector("source");
-    return source
-      ? (source.srcset || source.dataset.srcset)
-      : (pic.querySelector("img").src || pic.querySelector("img").dataset.src);
+    // Prefer WebP for broad browser support in lightbox (single <img>, no <picture> fallback)
+    const webpSource = pic.querySelector("source[type='image/webp']");
+    if (webpSource) return webpSource.srcset || webpSource.dataset.srcset;
+    const anySource = pic.querySelector("source");
+    if (anySource) return anySource.srcset || anySource.dataset.srcset;
+    const imgEl = pic.querySelector("img");
+    return imgEl?.src || imgEl?.dataset.src;
   }
 
   function preloadSlide(index) {
@@ -462,7 +465,10 @@ function initLightbox(grid) {
   }
 
   function updateUI() {
+    imgEl.classList.add("lightbox__img--loading");
     imgEl.src = slides[currentIndex];
+    imgEl.onload = () => imgEl.classList.remove("lightbox__img--loading");
+    imgEl.onerror = () => imgEl.classList.remove("lightbox__img--loading");
 
     // Arrows
     const isMulti = slides.length > 1;
@@ -501,6 +507,13 @@ function initLightbox(grid) {
     updateUI();
   }
 
+  function setBackgroundInert(inert) {
+    document.querySelectorAll(".masonry, .project-header, #app").forEach((el) => {
+      if (inert) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
+    });
+  }
+
   function open(slideUrls, startIndex, trigger) {
     slides = slideUrls;
     currentIndex = startIndex;
@@ -508,18 +521,19 @@ function initLightbox(grid) {
     preloaded.clear();
     preloaded.add(currentIndex);
     updateUI();
+    // Set liveRegion for single images too
+    if (slides.length === 1) {
+      liveRegion.textContent = "Image viewer";
+      overlay.setAttribute("aria-label", "Image viewer");
+    }
     overlay.classList.add("lightbox--open");
-    document.getElementById("app")?.setAttribute("inert", "");
-    document.querySelector(".masonry")?.setAttribute("inert", "");
-    document.querySelector(".project-header")?.setAttribute("inert", "");
+    setBackgroundInert(true);
     closeBtn.focus();
   }
 
   function close() {
     overlay.classList.remove("lightbox--open");
-    document.getElementById("app")?.removeAttribute("inert");
-    document.querySelector(".masonry")?.removeAttribute("inert");
-    document.querySelector(".project-header")?.removeAttribute("inert");
+    setBackgroundInert(false);
     triggerEl?.focus();
   }
 
@@ -563,7 +577,7 @@ function initLightbox(grid) {
     const dx = e.clientX - pointerStartX;
     const dy = e.clientY - pointerStartY;
     if (Math.abs(dx) < 50) return;
-    if (Math.abs(dy) > Math.abs(dx) / 1.5) return;
+    if (Math.abs(dy) > Math.abs(dx)) return;
     if (dx < 0) goTo(currentIndex + 1);
     else goTo(currentIndex - 1);
   });
@@ -577,10 +591,11 @@ function initLightbox(grid) {
 
     const slidesData = pic.dataset.slides;
     if (slidesData) {
-      // Carousel: open with all slide URLs (avif preferred)
-      const baseSlugs = JSON.parse(slidesData);
-      const avifUrls = baseSlugs.map((s) => s + ".avif");
-      open(avifUrls, 0, pic);
+      // Carousel: open with all slide URLs (webp for broad browser support)
+      let baseSlugs;
+      try { baseSlugs = JSON.parse(slidesData); } catch { return; }
+      const urls = baseSlugs.map((s) => s + ".webp");
+      open(urls, 0, pic);
     } else {
       // Single image
       const src = getSingleSrc(pic);
