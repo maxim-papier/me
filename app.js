@@ -166,30 +166,9 @@ function renderAll() {
   grid.className = "masonry";
 
   const pictures = allImages.map((img) => {
-    const picture = document.createElement("picture");
-    picture.dataset.cat = img.cat;
-    picture.dataset.project = img.projectId;
-
     const basePath = `assets/images/${img.projectId}`;
-
-    const sourceAvif = document.createElement("source");
-    sourceAvif.srcset = `${basePath}/${img.cat}/${img.slug}.avif`;
-    sourceAvif.type = "image/avif";
-
-    const sourceWebp = document.createElement("source");
-    sourceWebp.srcset = `${basePath}/${img.cat}/${img.slug}.webp`;
-    sourceWebp.type = "image/webp";
-
-    const imgEl = document.createElement("img");
-    imgEl.src = `${basePath}/${img.cat}/${img.slug}.webp`;
-    imgEl.alt = "";
-    imgEl.loading = "lazy";
-    imgEl.onerror = () => {
-      picture.remove();
-      layoutMasonry(grid);
-    };
-
-    picture.append(sourceAvif, sourceWebp, imgEl);
+    const picture = createPicture(img, basePath, grid);
+    picture.dataset.project = img.projectId;
     return picture;
   });
 
@@ -283,30 +262,7 @@ function renderProject(project) {
   grid.className = "masonry";
 
   const basePath = `assets/images/${project.id}`;
-  const pictures = project.images.map((img) => {
-    const picture = document.createElement("picture");
-    picture.dataset.cat = img.cat;
-
-    const sourceAvif = document.createElement("source");
-    sourceAvif.srcset = `${basePath}/${img.cat}/${img.slug}.avif`;
-    sourceAvif.type = "image/avif";
-
-    const sourceWebp = document.createElement("source");
-    sourceWebp.srcset = `${basePath}/${img.cat}/${img.slug}.webp`;
-    sourceWebp.type = "image/webp";
-
-    const imgEl = document.createElement("img");
-    imgEl.src = `${basePath}/${img.cat}/${img.slug}.webp`;
-    imgEl.alt = "";
-    imgEl.loading = "lazy";
-    imgEl.onerror = () => {
-      picture.remove();
-      layoutMasonry(grid);
-    };
-
-    picture.append(sourceAvif, sourceWebp, imgEl);
-    return picture;
-  });
+  const pictures = project.images.map((img) => createPicture(img, basePath, grid));
 
   for (let i = pictures.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -321,6 +277,60 @@ function renderProject(project) {
   app.replaceWith(grid);
   waitForImages(grid);
   initLightbox(grid);
+}
+
+// --- Picture element factory ---
+
+function createPicture(img, basePath, grid) {
+  const picture = document.createElement("picture");
+  picture.dataset.cat = img.cat;
+
+  const isCarousel = img.slides && img.slides.length > 1;
+  let coverAvif, coverWebp;
+
+  if (img.slides) {
+    // Carousel: cover = first slide inside subfolder
+    coverAvif = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.avif`;
+    coverWebp = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.webp`;
+    // Store slide URLs for lightbox
+    picture.dataset.group = img.slug;
+    picture.dataset.slides = JSON.stringify(
+      img.slides.map((s) => `${basePath}/${img.cat}/${img.slug}/${s}`)
+    );
+  } else {
+    // Single image
+    coverAvif = `${basePath}/${img.cat}/${img.slug}.avif`;
+    coverWebp = `${basePath}/${img.cat}/${img.slug}.webp`;
+  }
+
+  const sourceAvif = document.createElement("source");
+  sourceAvif.srcset = coverAvif;
+  sourceAvif.type = "image/avif";
+
+  const sourceWebp = document.createElement("source");
+  sourceWebp.srcset = coverWebp;
+  sourceWebp.type = "image/webp";
+
+  const imgEl = document.createElement("img");
+  imgEl.src = coverWebp;
+  imgEl.alt = "";
+  imgEl.loading = "lazy";
+  imgEl.onerror = () => {
+    picture.remove();
+    layoutMasonry(grid);
+  };
+
+  picture.append(sourceAvif, sourceWebp, imgEl);
+
+  // Badge for carousels with 2+ slides
+  if (isCarousel) {
+    const badge = document.createElement("span");
+    badge.className = "slide-badge";
+    badge.textContent = img.slides.length;
+    picture.appendChild(badge);
+  }
+
+  return picture;
 }
 
 // --- Shared helpers ---
@@ -390,31 +400,192 @@ function layoutMasonry(grid) {
 // --- Lightbox ---
 
 function initLightbox(grid) {
+  // Build lightbox DOM
   const overlay = document.createElement("div");
   overlay.className = "lightbox";
-  const img = document.createElement("img");
-  overlay.appendChild(img);
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Image viewer");
+
+  const content = document.createElement("div");
+  content.className = "lightbox__content";
+
+  const imgEl = document.createElement("img");
+  imgEl.className = "lightbox__img";
+  content.appendChild(imgEl);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "lightbox__close";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.textContent = "×";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.className = "lightbox__arrow lightbox__arrow--prev";
+  prevBtn.setAttribute("aria-label", "Previous image");
+  prevBtn.textContent = "‹";
+
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "lightbox__arrow lightbox__arrow--next";
+  nextBtn.setAttribute("aria-label", "Next image");
+  nextBtn.textContent = "›";
+
+  const dotsNav = document.createElement("div");
+  dotsNav.className = "lightbox__dots";
+
+  const liveRegion = document.createElement("div");
+  liveRegion.setAttribute("aria-live", "polite");
+  liveRegion.className = "sr-only";
+
+  overlay.append(closeBtn, prevBtn, content, nextBtn, dotsNav, liveRegion);
   document.body.appendChild(overlay);
+
+  // State
+  let slides = [];
+  let currentIndex = 0;
+  let triggerEl = null;
+  const preloaded = new Set();
+
+  function getSingleSrc(pic) {
+    const source = pic.querySelector("source[type='image/avif']") || pic.querySelector("source");
+    return source
+      ? (source.srcset || source.dataset.srcset)
+      : (pic.querySelector("img").src || pic.querySelector("img").dataset.src);
+  }
+
+  function preloadSlide(index) {
+    if (index < 0 || index >= slides.length || preloaded.has(index)) return;
+    preloaded.add(index);
+    const img = new Image();
+    img.src = slides[index];
+    img.decode?.().catch(() => {});
+  }
+
+  function updateUI() {
+    imgEl.src = slides[currentIndex];
+
+    // Arrows
+    const isMulti = slides.length > 1;
+    prevBtn.style.display = isMulti ? "" : "none";
+    nextBtn.style.display = isMulti ? "" : "none";
+    dotsNav.style.display = isMulti ? "" : "none";
+
+    if (isMulti) {
+      prevBtn.setAttribute("aria-disabled", currentIndex === 0 ? "true" : "false");
+      prevBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === 0);
+      nextBtn.setAttribute("aria-disabled", currentIndex === slides.length - 1 ? "true" : "false");
+      nextBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === slides.length - 1);
+
+      // Dots
+      dotsNav.innerHTML = "";
+      for (let i = 0; i < slides.length; i++) {
+        const dot = document.createElement("button");
+        dot.className = "lightbox__dot" + (i === currentIndex ? " lightbox__dot--active" : "");
+        dot.setAttribute("aria-label", `Go to image ${i + 1}`);
+        dot.dataset.index = i;
+        dotsNav.appendChild(dot);
+      }
+
+      liveRegion.textContent = `Image ${currentIndex + 1} of ${slides.length}`;
+      overlay.setAttribute("aria-label", `Image ${currentIndex + 1} of ${slides.length}`);
+    }
+
+    // Preload adjacent
+    preloadSlide(currentIndex + 1);
+    preloadSlide(currentIndex - 1);
+  }
+
+  function goTo(index) {
+    if (index < 0 || index >= slides.length) return;
+    currentIndex = index;
+    updateUI();
+  }
+
+  function open(slideUrls, startIndex, trigger) {
+    slides = slideUrls;
+    currentIndex = startIndex;
+    triggerEl = trigger;
+    preloaded.clear();
+    preloaded.add(currentIndex);
+    updateUI();
+    overlay.classList.add("lightbox--open");
+    document.getElementById("app")?.setAttribute("inert", "");
+    document.querySelector(".masonry")?.setAttribute("inert", "");
+    document.querySelector(".project-header")?.setAttribute("inert", "");
+    closeBtn.focus();
+  }
 
   function close() {
     overlay.classList.remove("lightbox--open");
+    document.getElementById("app")?.removeAttribute("inert");
+    document.querySelector(".masonry")?.removeAttribute("inert");
+    document.querySelector(".project-header")?.removeAttribute("inert");
+    triggerEl?.focus();
   }
 
-  overlay.addEventListener("click", close);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
+  // Event handlers
+  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay || e.target === content) close();
   });
 
+  prevBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex - 1); });
+  nextBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex + 1); });
+
+  dotsNav.addEventListener("click", (e) => {
+    const dot = e.target.closest(".lightbox__dot");
+    if (!dot) return;
+    e.stopPropagation();
+    goTo(Number(dot.dataset.index));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (!overlay.classList.contains("lightbox--open")) return;
+    if (e.key === "Escape") close();
+    if (e.key === "ArrowLeft") goTo(currentIndex - 1);
+    if (e.key === "ArrowRight") goTo(currentIndex + 1);
+  });
+
+  // Swipe support (Phase 4)
+  let pointerStartX = 0, pointerStartY = 0, isDragging = false;
+
+  overlay.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    pointerStartX = e.clientX;
+    pointerStartY = e.clientY;
+    isDragging = true;
+    overlay.setPointerCapture(e.pointerId);
+  });
+
+  overlay.addEventListener("pointerup", (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    const dx = e.clientX - pointerStartX;
+    const dy = e.clientY - pointerStartY;
+    if (Math.abs(dx) < 50) return;
+    if (Math.abs(dy) > Math.abs(dx) / 1.5) return;
+    if (dx < 0) goTo(currentIndex + 1);
+    else goTo(currentIndex - 1);
+  });
+
+  overlay.addEventListener("pointercancel", () => { isDragging = false; });
+
+  // Grid click handler
   grid.addEventListener("click", (e) => {
     const pic = e.target.closest("picture");
     if (!pic) return;
-    const source = pic.querySelector("source[type='image/avif']") || pic.querySelector("source");
-    const srcUrl = source
-      ? (source.srcset || source.dataset.srcset)
-      : (pic.querySelector("img").src || pic.querySelector("img").dataset.src);
-    if (!srcUrl) return;
-    img.src = srcUrl;
-    overlay.classList.add("lightbox--open");
+
+    const slidesData = pic.dataset.slides;
+    if (slidesData) {
+      // Carousel: open with all slide URLs (avif preferred)
+      const baseSlugs = JSON.parse(slidesData);
+      const avifUrls = baseSlugs.map((s) => s + ".avif");
+      open(avifUrls, 0, pic);
+    } else {
+      // Single image
+      const src = getSingleSrc(pic);
+      if (!src) return;
+      open([src], 0, pic);
+    }
   });
 }
 
