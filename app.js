@@ -409,7 +409,11 @@ function initLightbox(grid) {
     const pic = e.target.closest("picture");
     if (!pic) return;
     const source = pic.querySelector("source[type='image/avif']") || pic.querySelector("source");
-    img.src = source ? source.srcset : pic.querySelector("img").src;
+    const srcUrl = source
+      ? (source.srcset || source.dataset.srcset)
+      : (pic.querySelector("img").src || pic.querySelector("img").dataset.src);
+    if (!srcUrl) return;
+    img.src = srcUrl;
     overlay.classList.add("lightbox--open");
   });
 }

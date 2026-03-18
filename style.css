@@ -129,7 +129,7 @@ body {
 .clients-bar__name {
   font-size: 18px;
   font-weight: 500;
-  line-height: 52px;
+  line-height: 1.4;
 }
 
 .clients-bar__sep {
@@ -141,7 +141,7 @@ body {
 .clients-bar__show-all {
   font-size: 18px;
   font-weight: 400;
-  line-height: 52px;
+  line-height: 1.4;
   color: black;
   text-decoration: underline;
   cursor: pointer;
@@ -194,6 +194,10 @@ body.page-project {
   color: #fff;
 }
 
+body.page-project :focus-visible {
+  outline-color: #fff;
+}
+
 .project-header {
   position: sticky;
   top: 0;
@@ -237,7 +241,7 @@ body.page-project {
   font-weight: 500;
   color: #888;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: color var(--transition), background var(--transition), border-color var(--transition);
 }
 
 .filter-btn:hover {
@@ -346,11 +350,26 @@ body.page-project {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  .masonry picture {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Responsive */
 @media (max-width: 1200px) {
   .masonry { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .clients-bar {
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 40px 24px;
+  }
+  .clients-bar__label {
+    padding-right: 0;
+  }
 }
 
 @media (max-width: 600px) {
