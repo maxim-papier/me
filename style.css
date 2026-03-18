@@ -310,8 +310,8 @@ body.page-project :focus-visible {
   filter: brightness(0.6);
 }
 
-.masonry picture:hover {
-  transform: scale(1.02);
+.masonry picture.loaded:hover {
+  transform: translateY(0) scale(1.02);
 }
 
 /* Fade-in animation */
