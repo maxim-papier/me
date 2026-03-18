@@ -143,7 +143,7 @@ const projects = [
   },
   {
     id: "brc",
-    name: "BarclayRay",
+    name: "Barclay Rae",
     logo: "assets/logos/barclayray.png",
     categories: {
       "social-media": "Social Media",
