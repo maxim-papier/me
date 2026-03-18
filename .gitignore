@@ -1,5 +1,6 @@
 # Source images (heavy PNGs, not for git)
 assets/portfolio/
+inbox/
 
 # OS
 .DS_Store
