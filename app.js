@@ -422,12 +422,12 @@ function initLightbox(grid) {
   const prevBtn = document.createElement("button");
   prevBtn.className = "lightbox__arrow lightbox__arrow--prev";
   prevBtn.setAttribute("aria-label", "Previous image");
-  prevBtn.textContent = "‹";
+  prevBtn.textContent = "";
 
   const nextBtn = document.createElement("button");
   nextBtn.className = "lightbox__arrow lightbox__arrow--next";
   nextBtn.setAttribute("aria-label", "Next image");
-  nextBtn.textContent = "›";
+  nextBtn.textContent = "";
 
   const dotsNav = document.createElement("div");
   dotsNav.className = "lightbox__dots";
