@@ -326,16 +326,17 @@ body.page-project :focus-visible {
   transition: transform 0.3s ease, filter 0.3s ease;
 }
 
-.masonry:hover picture:not(:hover) img {
-  filter: brightness(0.6);
-}
-
-.masonry picture.loaded:hover img {
-  transform: scale(1.02);
-}
-
-.masonry picture.loaded:hover .slide-badge {
-  transform: scale(1.02);
+/* Hover effects — only on devices with a pointer (not touch) */
+@media (hover: hover) {
+  .masonry:hover picture:not(:hover) img {
+    filter: brightness(0.6);
+  }
+  .masonry picture.loaded:hover img {
+    transform: scale(1.02);
+  }
+  .masonry picture.loaded:hover .slide-badge {
+    transform: scale(1.02);
+  }
 }
 
 /* Fade-in animation */
