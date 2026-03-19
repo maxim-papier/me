@@ -2,6 +2,78 @@ const app = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
 
+// Reduced motion preference (reactive)
+let prefersReducedMotion = window.matchMedia(
+  "(prefers-reduced-motion: reduce)"
+).matches;
+window
+  .matchMedia("(prefers-reduced-motion: reduce)")
+  .addEventListener("change", (e) => {
+    prefersReducedMotion = e.matches;
+  });
+
+// --- Drag physics helpers (must be before routing code — classes aren't hoisted) ---
+
+class VelocityTracker {
+  constructor() {
+    this.history = [];
+  }
+  add(x, time) {
+    this.history.push({ x, time });
+    const cutoff = time - 100;
+    while (this.history.length > 5 || this.history[0]?.time < cutoff)
+      this.history.shift();
+  }
+  get() {
+    const h = this.history;
+    if (h.length < 2) return 0;
+    const dt = h[h.length - 1].time - h[0].time;
+    if (dt === 0) return 0;
+    return (h[h.length - 1].x - h[0].x) / dt;
+  }
+  reset() {
+    this.history = [];
+  }
+}
+
+function shouldSnap(displacement, velocity, containerWidth) {
+  const VELOCITY_THRESHOLD = 0.5;
+  const DISTANCE_THRESHOLD = 0.35;
+  const velocityOK = Math.abs(velocity) > VELOCITY_THRESHOLD;
+  const distanceOK =
+    Math.abs(displacement) > containerWidth * DISTANCE_THRESHOLD;
+  const sameDirection =
+    Math.sign(displacement) === Math.sign(velocity) || velocity === 0;
+  return (velocityOK || distanceOK) && sameDirection;
+}
+
+function springAnimate({ from, to, velocity = 0, stiffness = 200, damping = 20, onUpdate, onComplete }) {
+  let position = from;
+  let v = velocity;
+  let lastTime = performance.now();
+  let rafId = null;
+  function tick(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.064);
+    lastTime = now;
+    const force = -stiffness * (position - to) - damping * v;
+    v += force * dt;
+    position += v * dt;
+    onUpdate(position);
+    if (Math.abs(position - to) < 0.5 && Math.abs(v) < 0.1) {
+      onUpdate(to);
+      onComplete?.();
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  rafId = requestAnimationFrame(tick);
+  return () => { if (rafId) cancelAnimationFrame(rafId); };
+}
+
+function rubberBand(offset, dimension) {
+  return (1 - 1 / ((offset * 0.55) / dimension + 1)) * dimension;
+}
+
 // Determine which page to render
 if (window.location.pathname.includes("project.html")) {
   if (!projectId) {
@@ -50,7 +122,9 @@ function renderIndex() {
 
     if (project.logo) {
       const logo = document.createElement("img");
-      logo.className = "clients-bar__logo" + (project.logoRound ? " clients-bar__logo--round" : "");
+      logo.className =
+        "clients-bar__logo" +
+        (project.logoRound ? " clients-bar__logo--round" : "");
       logo.src = project.logo;
       logo.alt = project.name;
       logo.width = 32;
@@ -98,7 +172,11 @@ function renderAll() {
   const allImages = [];
   for (const project of projects) {
     for (const img of project.images) {
-      allImages.push({ ...img, projectId: project.id, projectName: project.name });
+      allImages.push({
+        ...img,
+        projectId: project.id,
+        projectName: project.name,
+      });
     }
   }
 
@@ -189,7 +267,9 @@ function renderAll() {
     if (!btn) return;
     const filter = btn.dataset.filter;
     const filterType = btn.dataset.filterType;
-    nav.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+    nav
+      .querySelectorAll(".filter-btn")
+      .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     grid.querySelectorAll("picture").forEach((pic) => {
       let show = false;
@@ -243,7 +323,9 @@ function renderProject(project) {
       const btn = e.target.closest(".filter-btn");
       if (!btn) return;
       const filter = btn.dataset.filter;
-      nav.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      nav
+        .querySelectorAll(".filter-btn")
+        .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       grid.querySelectorAll("picture").forEach((pic) => {
         const show = filter === "all" || pic.dataset.cat === filter;
@@ -262,7 +344,9 @@ function renderProject(project) {
   grid.className = "masonry";
 
   const basePath = `assets/images/${project.id}`;
-  const pictures = project.images.map((img) => createPicture(img, basePath, grid));
+  const pictures = project.images.map((img) =>
+    createPicture(img, basePath, grid)
+  );
 
   for (let i = pictures.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -292,7 +376,7 @@ function createPicture(img, basePath, grid) {
     // Carousel: cover = first slide inside subfolder
     coverAvif = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.avif`;
     coverWebp = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.webp`;
-    // Store slide URLs for lightbox
+    // Store slide base paths for lightbox (without extension)
     picture.dataset.group = img.slug;
     picture.dataset.slides = JSON.stringify(
       img.slides.map((s) => `${basePath}/${img.cat}/${img.slug}/${s}`)
@@ -322,11 +406,13 @@ function createPicture(img, basePath, grid) {
 
   picture.append(sourceAvif, sourceWebp, imgEl);
 
-  // Badge for carousels with 2+ slides
+  // Badge for carousels with 2+ slides — SVG icon + count
   if (isCarousel) {
     const badge = document.createElement("span");
     badge.className = "slide-badge";
-    badge.textContent = img.slides.length;
+    badge.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="13" height="20" rx="2"/><path d="M19 4v16"/><path d="M22 7v10"/></svg> ' +
+      img.slides.length;
     picture.appendChild(badge);
   }
 
@@ -369,12 +455,18 @@ function waitForImages(grid) {
         });
 
         if (img && img.dataset.src) {
-          img.src = img.dataset.src;
-          delete img.dataset.src;
+          // Set handler BEFORE src — cached images fire onload synchronously
           img.addEventListener("load", () => {
             pic.classList.add("loaded");
             layoutMasonry(grid);
           });
+          img.src = img.dataset.src;
+          delete img.dataset.src;
+          // Handle already-complete images (race: loaded before observer fired)
+          if (img.complete && img.naturalHeight > 0) {
+            pic.classList.add("loaded");
+            layoutMasonry(grid);
+          }
         }
 
         observer.unobserve(pic);
@@ -384,6 +476,7 @@ function waitForImages(grid) {
   );
 
   pictures.forEach((pic) => observer.observe(pic));
+
   window.addEventListener("resize", () => layoutMasonry(grid));
 }
 
@@ -395,6 +488,28 @@ function layoutMasonry(grid) {
     if (!img) return;
     pic.style.gridRowEnd = "span " + Math.ceil(img.offsetHeight + gap);
   });
+}
+
+// --- Shared dot helpers ---
+
+function renderDots(container, count, classPrefix) {
+  container.replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement("button");
+    dot.className = `${classPrefix}__dot`;
+    dot.setAttribute("aria-label", `Go to image ${i + 1}`);
+    dot.dataset.index = i;
+    container.appendChild(dot);
+  }
+}
+
+function updateDotActive(container, activeIndex, classPrefix) {
+  for (const dot of container.children) {
+    dot.classList.toggle(
+      `${classPrefix}__dot--active`,
+      +dot.dataset.index === activeIndex
+    );
+  }
 }
 
 // --- Lightbox ---
@@ -410,9 +525,29 @@ function initLightbox(grid) {
   const content = document.createElement("div");
   content.className = "lightbox__content";
 
-  const imgEl = document.createElement("img");
-  imgEl.className = "lightbox__img";
-  content.appendChild(imgEl);
+  // Stage: container for two slides (current + incoming) for slide transitions
+  const stage = document.createElement("div");
+  stage.className = "lightbox__stage";
+
+  function createSlideEl() {
+    const pic = document.createElement("picture");
+    pic.className = "lightbox__slide";
+    const sAvif = document.createElement("source");
+    sAvif.type = "image/avif";
+    const sWebp = document.createElement("source");
+    sWebp.type = "image/webp";
+    const img = document.createElement("img");
+    img.className = "lightbox__slide-img";
+    pic.append(sAvif, sWebp, img);
+    return pic;
+  }
+
+  const slideA = createSlideEl();
+  const slideB = createSlideEl();
+  slideA.classList.add("lightbox__slide--current");
+  slideB.classList.add("lightbox__slide--incoming");
+  stage.append(slideA, slideB);
+  content.appendChild(stage);
 
   const closeBtn = document.createElement("button");
   closeBtn.className = "lightbox__close";
@@ -445,106 +580,446 @@ function initLightbox(grid) {
   let currentIndex = 0;
   let triggerEl = null;
   const preloaded = new Set();
+  let loadGen = 0;
 
-  function getSingleSrc(pic) {
-    // Prefer WebP for broad browser support in lightbox (single <img>, no <picture> fallback)
-    const webpSource = pic.querySelector("source[type='image/webp']");
-    if (webpSource) return webpSource.srcset || webpSource.dataset.srcset;
-    const anySource = pic.querySelector("source");
-    if (anySource) return anySource.srcset || anySource.dataset.srcset;
-    const imgEl = pic.querySelector("img");
-    return imgEl?.src || imgEl?.dataset.src;
+  // Slide elements — current and incoming swap roles after each transition
+  let currentSlide = slideA;
+  let incomingSlide = slideB;
+
+  function setSlideSrc(slideEl, basePath) {
+    const img = slideEl.querySelector("img");
+    const avif = slideEl.querySelector('source[type="image/avif"]');
+    const webp = slideEl.querySelector('source[type="image/webp"]');
+    // Set handlers BEFORE src (cached images fire onload synchronously)
+    img.onload = () => slideEl.classList.remove("lightbox__slide--loading");
+    img.onerror = () => slideEl.classList.remove("lightbox__slide--loading");
+    avif.srcset = basePath + ".avif";
+    webp.srcset = basePath + ".webp";
+    img.src = basePath + ".webp";
+  }
+
+  function clearSlideSrc(slideEl) {
+    slideEl.querySelectorAll("source").forEach((s) => (s.srcset = ""));
+    slideEl.querySelector("img").removeAttribute("src");
   }
 
   function preloadSlide(index) {
-    if (index < 0 || index >= slides.length || preloaded.has(index)) return;
-    preloaded.add(index);
+    const wi = ((index % slides.length) + slides.length) % slides.length;
+    if (preloaded.has(wi)) return;
+    preloaded.add(wi);
     const img = new Image();
-    img.src = slides[index];
+    img.src = slides[wi] + ".webp";
     img.decode?.().catch(() => {});
   }
 
-  function updateUI() {
-    imgEl.classList.add("lightbox__img--loading");
-    imgEl.src = slides[currentIndex];
-    imgEl.onload = () => imgEl.classList.remove("lightbox__img--loading");
-    imgEl.onerror = () => imgEl.classList.remove("lightbox__img--loading");
+  function wrapIndex(i) {
+    return ((i % slides.length) + slides.length) % slides.length;
+  }
 
-    // Arrows
+  // Update UI elements (dots, arrows, aria) without changing the slide image
+  function updateChrome() {
     const isMulti = slides.length > 1;
     prevBtn.style.display = isMulti ? "" : "none";
     nextBtn.style.display = isMulti ? "" : "none";
     dotsNav.style.display = isMulti ? "" : "none";
 
     if (isMulti) {
-      prevBtn.setAttribute("aria-disabled", currentIndex === 0 ? "true" : "false");
-      prevBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === 0);
-      nextBtn.setAttribute("aria-disabled", currentIndex === slides.length - 1 ? "true" : "false");
-      nextBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === slides.length - 1);
-
-      // Dots
-      dotsNav.innerHTML = "";
-      for (let i = 0; i < slides.length; i++) {
-        const dot = document.createElement("button");
-        dot.className = "lightbox__dot" + (i === currentIndex ? " lightbox__dot--active" : "");
-        dot.setAttribute("aria-label", `Go to image ${i + 1}`);
-        dot.dataset.index = i;
-        dotsNav.appendChild(dot);
-      }
-
+      updateDotActive(dotsNav, currentIndex, "lightbox");
       liveRegion.textContent = `Image ${currentIndex + 1} of ${slides.length}`;
-      overlay.setAttribute("aria-label", `Image ${currentIndex + 1} of ${slides.length}`);
+      overlay.setAttribute(
+        "aria-label",
+        `Image ${currentIndex + 1} of ${slides.length}`
+      );
     }
 
-    // Preload adjacent
     preloadSlide(currentIndex + 1);
     preloadSlide(currentIndex - 1);
   }
 
+  // Set slide directly (no transition) — used for initial open and reduced motion
+  async function setSlideImmediate(index) {
+    const gen = ++loadGen;
+    currentIndex = wrapIndex(index);
+    currentSlide.classList.add("lightbox__slide--loading");
+    setSlideSrc(currentSlide, slides[currentIndex]);
+
+    try {
+      await Promise.race([
+        currentSlide.querySelector("img").decode(),
+        new Promise((_, r) => setTimeout(() => r("timeout"), 100)),
+      ]);
+    } catch { /* show anyway */ }
+    if (gen !== loadGen) return;
+    currentSlide.classList.remove("lightbox__slide--loading");
+
+    // Reset transforms
+    currentSlide.style.transform = "";
+    currentSlide.style.transition = "";
+    incomingSlide.style.transform = "translateX(100%)";
+    clearSlideSrc(incomingSlide);
+
+    updateChrome();
+  }
+
+  // --- Drag state machine ---
+  const STATE_IDLE = 0;
+  const STATE_DRAGGING = 1;
+  const STATE_SETTLING = 2;
+
+  let dragState = STATE_IDLE;
+  let dragStartX = 0;
+  let dragDx = 0;
+  let dragDirection = 0; // -1 = prev, 1 = next
+  let dragTargetIndex = -1;
+  let transitionGen = 0;
+  let settlingTimeout = null;
+  let cancelSpring = null;
+  const velocity = new VelocityTracker();
+
+  function forceToIdle() {
+    if (cancelSpring) { cancelSpring(); cancelSpring = null; }
+    if (settlingTimeout) { clearTimeout(settlingTimeout); settlingTimeout = null; }
+    currentSlide.style.transition = "";
+    currentSlide.style.transform = "";
+    currentSlide.style.willChange = "";
+    incomingSlide.style.transition = "";
+    incomingSlide.style.transform = "translateX(100%)";
+    incomingSlide.style.willChange = "";
+    clearSlideSrc(incomingSlide);
+    overlay.classList.remove("lightbox--dragging");
+    dragState = STATE_IDLE;
+  }
+
+  function swapSlides() {
+    // Swap roles
+    const tmp = currentSlide;
+    currentSlide = incomingSlide;
+    incomingSlide = tmp;
+    // Update classes
+    currentSlide.classList.add("lightbox__slide--current");
+    currentSlide.classList.remove("lightbox__slide--incoming");
+    incomingSlide.classList.add("lightbox__slide--incoming");
+    incomingSlide.classList.remove("lightbox__slide--current");
+  }
+
+  function animateSlide(direction) {
+    // direction: -1 = show prev, 1 = show next
+    if (slides.length <= 1) return;
+
+    const targetIndex = wrapIndex(currentIndex + direction);
+    const stageWidth = stage.offsetWidth;
+
+    // Prepare incoming slide
+    setSlideSrc(incomingSlide, slides[targetIndex]);
+    incomingSlide.style.transition = "none";
+    incomingSlide.style.transform = `translateX(${direction * stageWidth}px)`;
+    // Force reflow to apply initial position
+    incomingSlide.offsetHeight; // eslint-disable-line no-unused-expressions
+
+    if (prefersReducedMotion) {
+      // Instant swap — no animation
+      currentIndex = targetIndex;
+      swapSlides();
+      currentSlide.style.transform = "";
+      clearSlideSrc(incomingSlide);
+      incomingSlide.style.transform = "translateX(100%)";
+      updateChrome();
+      return;
+    }
+
+    dragState = STATE_SETTLING;
+    const gen = ++transitionGen;
+
+    currentSlide.style.transition = "transform 0.3s ease-out";
+    incomingSlide.style.transition = "transform 0.3s ease-out";
+    currentSlide.style.transform = `translateX(${-direction * stageWidth}px)`;
+    incomingSlide.style.transform = "translateX(0)";
+
+    settlingTimeout = setTimeout(() => {
+      if (dragState === STATE_SETTLING && transitionGen === gen) finishSettle(targetIndex, gen);
+    }, 500);
+
+    incomingSlide.addEventListener(
+      "transitionend",
+      function handler(e) {
+        if (e.target !== incomingSlide) return;
+        incomingSlide.removeEventListener("transitionend", handler);
+        if (gen !== transitionGen) return;
+        finishSettle(targetIndex, gen);
+      }
+    );
+  }
+
+  function finishSettle(targetIndex, gen) {
+    if (settlingTimeout) { clearTimeout(settlingTimeout); settlingTimeout = null; }
+    if (gen !== transitionGen) return;
+
+    currentIndex = targetIndex;
+    swapSlides();
+
+    currentSlide.style.transition = "";
+    currentSlide.style.transform = "";
+    currentSlide.style.willChange = "";
+    incomingSlide.style.transition = "";
+    incomingSlide.style.transform = "translateX(100%)";
+    incomingSlide.style.willChange = "";
+    clearSlideSrc(incomingSlide);
+    overlay.classList.remove("lightbox--dragging");
+
+    dragState = STATE_IDLE;
+    updateChrome();
+  }
+
+  // Pointer event handlers for drag
+  function onPointerDown(e) {
+    if (e.target.closest("button")) return;
+    if (slides.length <= 1) return;
+
+    if (dragState === STATE_SETTLING) {
+      // Rapid swipe: cancel current transition, force to idle
+      ++transitionGen;
+      forceToIdle();
+      // Delay 1 frame for Safari compositor flush
+      requestAnimationFrame(() => startDrag(e));
+      return;
+    }
+
+    if (dragState !== STATE_IDLE) return;
+    startDrag(e);
+  }
+
+  function startDrag(e) {
+    dragState = STATE_DRAGGING;
+    dragStartX = e.clientX;
+    dragDx = 0;
+    dragDirection = 0;
+    dragTargetIndex = -1;
+    velocity.reset();
+    velocity.add(e.clientX, e.timeStamp);
+
+    currentSlide.style.willChange = "transform";
+    incomingSlide.style.willChange = "transform";
+    currentSlide.style.transition = "none";
+    incomingSlide.style.transition = "none";
+
+    overlay.classList.add("lightbox--dragging");
+    overlay.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e) {
+    if (dragState !== STATE_DRAGGING) return;
+    dragDx = e.clientX - dragStartX;
+    velocity.add(e.clientX, e.timeStamp);
+
+    const stageWidth = stage.offsetWidth;
+    const dir = dragDx < 0 ? 1 : -1; // 1 = next, -1 = prev
+    const targetIndex = wrapIndex(currentIndex + dir);
+
+    // Load incoming slide if direction changed
+    if (dir !== dragDirection) {
+      dragDirection = dir;
+      dragTargetIndex = targetIndex;
+      setSlideSrc(incomingSlide, slides[targetIndex]);
+    }
+
+    // Translate both slides
+    currentSlide.style.transform = `translateX(${dragDx}px)`;
+    incomingSlide.style.transform = `translateX(${dragDx + dir * -1 * stageWidth}px)`;
+  }
+
+  function onPointerUp(e) {
+    if (dragState !== STATE_DRAGGING) return;
+    velocity.add(e.clientX, e.timeStamp);
+    const vx = velocity.get();
+    const stageWidth = stage.offsetWidth;
+
+    if (shouldSnap(dragDx, vx, stageWidth) && dragTargetIndex >= 0) {
+      // Commit to slide change
+      const dir = dragDirection;
+      dragState = STATE_SETTLING;
+      const gen = ++transitionGen;
+
+      if (prefersReducedMotion) {
+        finishSettle(dragTargetIndex, gen);
+        return;
+      }
+
+      currentSlide.style.transition = "transform 0.3s ease-out";
+      incomingSlide.style.transition = "transform 0.3s ease-out";
+      currentSlide.style.transform = `translateX(${dir * -1 * stageWidth}px)`;
+      incomingSlide.style.transform = "translateX(0)";
+
+      settlingTimeout = setTimeout(() => {
+        if (dragState === STATE_SETTLING && transitionGen === gen) finishSettle(dragTargetIndex, gen);
+      }, 500);
+
+      incomingSlide.addEventListener(
+        "transitionend",
+        function handler(ev) {
+          if (ev.target !== incomingSlide) return;
+          incomingSlide.removeEventListener("transitionend", handler);
+          if (gen !== transitionGen) return;
+          finishSettle(dragTargetIndex, gen);
+        }
+      );
+    } else {
+      // Bounce back with spring
+      dragState = STATE_SETTLING;
+      const gen = ++transitionGen;
+      const stageW = stageWidth;
+
+      if (prefersReducedMotion) {
+        forceToIdle();
+        return;
+      }
+
+      const vxPxPerSec = vx * 1000;
+      cancelSpring = springAnimate({
+        from: dragDx,
+        to: 0,
+        velocity: vxPxPerSec,
+        stiffness: 300,
+        damping: 25,
+        onUpdate(x) {
+          currentSlide.style.transform = `translateX(${x}px)`;
+          if (dragDirection !== 0) {
+            incomingSlide.style.transform = `translateX(${x + dragDirection * -1 * stageW}px)`;
+          }
+        },
+        onComplete() {
+          cancelSpring = null;
+          if (gen === transitionGen) forceToIdle();
+        },
+      });
+    }
+  }
+
+  function onPointerCancel() {
+    if (dragState === STATE_DRAGGING || dragState === STATE_SETTLING) {
+      ++transitionGen;
+      forceToIdle();
+    }
+  }
+
+  // Track whether the pointer moved (to distinguish click from drag)
+  let pointerMoved = false;
+
+  overlay.addEventListener("pointerdown", (e) => {
+    pointerMoved = false;
+    onPointerDown(e);
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    if (dragState === STATE_DRAGGING && Math.abs(e.clientX - dragStartX) > 5) {
+      pointerMoved = true;
+    }
+    onPointerMove(e);
+  });
+  overlay.addEventListener("pointerup", onPointerUp);
+  overlay.addEventListener("pointercancel", onPointerCancel);
+
+  // Navigation functions
   function goTo(index) {
-    if (index < 0 || index >= slides.length) return;
-    currentIndex = index;
-    updateUI();
+    if (slides.length === 0) return;
+    if (dragState !== STATE_IDLE) return;
+    const target = wrapIndex(index);
+    if (target === currentIndex) return;
+
+    const diff = target - currentIndex;
+    // Determine shortest direction for wrap-around
+    let direction;
+    if (Math.abs(diff) <= slides.length / 2) {
+      direction = diff > 0 ? 1 : -1;
+    } else {
+      direction = diff > 0 ? -1 : 1;
+    }
+    animateSlide(direction);
   }
 
   function setBackgroundInert(inert) {
-    document.querySelectorAll(".masonry, .project-header, #app").forEach((el) => {
-      if (inert) el.setAttribute("inert", "");
-      else el.removeAttribute("inert");
-    });
+    document
+      .querySelectorAll(".masonry, .project-header, #app")
+      .forEach((el) => {
+        if (inert) el.setAttribute("inert", "");
+        else el.removeAttribute("inert");
+      });
   }
 
-  function open(slideUrls, startIndex, trigger) {
+  function openDOM(slideUrls, startIndex) {
     slides = slideUrls;
-    currentIndex = startIndex;
-    triggerEl = trigger;
     preloaded.clear();
+
+    // Reset slide elements
+    currentSlide = slideA;
+    incomingSlide = slideB;
+    slideA.classList.add("lightbox__slide--current");
+    slideA.classList.remove("lightbox__slide--incoming");
+    slideB.classList.add("lightbox__slide--incoming");
+    slideB.classList.remove("lightbox__slide--current");
+
+    forceToIdle();
+
+    // Create dots once
+    if (slides.length > 1) {
+      renderDots(dotsNav, slides.length, "lightbox");
+    } else {
+      dotsNav.replaceChildren();
+    }
+
+    currentIndex = wrapIndex(startIndex);
     preloaded.add(currentIndex);
-    updateUI();
-    // Set liveRegion for single images too
+    setSlideSrc(currentSlide, slides[currentIndex]);
+    currentSlide.style.transform = "";
+    incomingSlide.style.transform = "translateX(100%)";
+    clearSlideSrc(incomingSlide);
+
+    updateChrome();
+
     if (slides.length === 1) {
       liveRegion.textContent = "Image viewer";
       overlay.setAttribute("aria-label", "Image viewer");
     }
     overlay.classList.add("lightbox--open");
+    document.body.style.overflow = "hidden";
     setBackgroundInert(true);
     closeBtn.focus();
   }
 
+  function open(slideUrls, startIndex, trigger) {
+    triggerEl = trigger;
+    openDOM(slideUrls, startIndex);
+  }
+
   function close() {
+    ++transitionGen;
+    forceToIdle();
     overlay.classList.remove("lightbox--open");
+    document.body.style.overflow = "";
     setBackgroundInert(false);
     triggerEl?.focus();
   }
 
   // Event handlers
-  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    close();
+  });
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay || e.target === content) close();
+    if (dragState !== STATE_IDLE) return;
+    // Don't close if user was dragging/swiping
+    if (pointerMoved) return;
+    // Close on click anywhere except nav buttons (arrows, dots)
+    if (e.target.closest("button")) return;
+    close();
   });
 
-  prevBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex - 1); });
-  nextBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex + 1); });
+  prevBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    goTo(currentIndex - 1);
+  });
+  nextBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    goTo(currentIndex + 1);
+  });
 
   dotsNav.addEventListener("click", (e) => {
     const dot = e.target.closest(".lightbox__dot");
@@ -555,52 +1030,35 @@ function initLightbox(grid) {
 
   document.addEventListener("keydown", (e) => {
     if (!overlay.classList.contains("lightbox--open")) return;
-    if (e.key === "Escape") close();
+    if (e.key === "Escape") {
+      // Prevent browser from exiting fullscreen — close lightbox first
+      e.preventDefault();
+      close();
+    }
     if (e.key === "ArrowLeft") goTo(currentIndex - 1);
     if (e.key === "ArrowRight") goTo(currentIndex + 1);
   });
 
-  // Swipe support (Phase 4)
-  let pointerStartX = 0, pointerStartY = 0, isDragging = false;
-
-  overlay.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button")) return;
-    pointerStartX = e.clientX;
-    pointerStartY = e.clientY;
-    isDragging = true;
-    overlay.setPointerCapture(e.pointerId);
-  });
-
-  overlay.addEventListener("pointerup", (e) => {
-    if (!isDragging) return;
-    isDragging = false;
-    const dx = e.clientX - pointerStartX;
-    const dy = e.clientY - pointerStartY;
-    if (Math.abs(dx) < 50) return;
-    if (Math.abs(dy) > Math.abs(dx)) return;
-    if (dx < 0) goTo(currentIndex + 1);
-    else goTo(currentIndex - 1);
-  });
-
-  overlay.addEventListener("pointercancel", () => { isDragging = false; });
-
   // Grid click handler
   grid.addEventListener("click", (e) => {
     const pic = e.target.closest("picture");
-    if (!pic) return;
+    if (!pic || pic.closest(".lightbox")) return;
 
     const slidesData = pic.dataset.slides;
     if (slidesData) {
-      // Carousel: open with all slide URLs (webp for broad browser support)
       let baseSlugs;
-      try { baseSlugs = JSON.parse(slidesData); } catch { return; }
-      const urls = baseSlugs.map((s) => s + ".webp");
-      open(urls, 0, pic);
+      try {
+        baseSlugs = JSON.parse(slidesData);
+      } catch {
+        return;
+      }
+      open(baseSlugs, 0, pic);
     } else {
-      // Single image
-      const src = getSingleSrc(pic);
-      if (!src) return;
-      open([src], 0, pic);
+      const webpSource = pic.querySelector("source[type='image/webp']");
+      const srcset = webpSource?.srcset || webpSource?.dataset?.srcset;
+      if (!srcset) return;
+      const basePath = srcset.replace(/\.webp$/, "");
+      open([basePath], 0, pic);
     }
   });
 }

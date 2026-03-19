@@ -229,7 +229,16 @@ body.page-project :focus-visible {
 .filter {
   display: flex;
   gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Fade hint for horizontal scroll on mobile */
+  mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+  padding-right: 16px;
 }
+
+.filter::-webkit-scrollbar { display: none; }
 
 .filter-btn {
   background: none;
@@ -242,6 +251,12 @@ body.page-project :focus-visible {
   color: #888;
   cursor: pointer;
   transition: color var(--transition), background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* Min 44px touch target */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 .filter-btn:hover {
@@ -260,6 +275,7 @@ body.page-project :focus-visible {
   align-self: stretch;
   background: #333;
   margin: 4px 4px;
+  flex-shrink: 0;
 }
 
 /* Masonry grid */
@@ -294,6 +310,13 @@ body.page-project :focus-visible {
   z-index: 1;
   line-height: 1.4;
   transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slide-badge svg {
+  flex-shrink: 0;
 }
 
 .masonry img {
@@ -347,7 +370,7 @@ body.page-project :focus-visible {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
-  touch-action: pan-y;
+  touch-action: none;
   user-select: none;
 }
 
@@ -365,23 +388,48 @@ body.page-project :focus-visible {
   max-height: 90vh;
 }
 
-.lightbox__img {
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
+.lightbox__stage {
+  position: relative;
+  overflow: hidden;
   border-radius: 4px;
   transform: scale(0.95);
-  transition: transform 0.3s ease, opacity 0.25s ease;
-  position: relative;
+  transition: transform 0.3s ease;
   z-index: 0;
 }
 
-.lightbox--open .lightbox__img {
+.lightbox--open .lightbox__stage {
   transform: scale(1);
 }
 
-.lightbox__img--loading {
+.lightbox__slide {
+  display: block;
+}
+
+.lightbox__slide--incoming {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lightbox__slide-img {
+  display: block;
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  transition: opacity 0.25s ease;
+}
+
+.lightbox__slide--loading .lightbox__slide-img,
+.lightbox__slide--loading img {
   opacity: 0.4;
+}
+
+/* Disable backdrop-filter on arrows during drag for GPU performance */
+.lightbox--dragging .lightbox__arrow {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .lightbox__close {
@@ -486,6 +534,11 @@ body.page-project :focus-visible {
   cursor: pointer;
   padding: 0;
   transition: background var(--transition);
+  /* 44px touch target via transparent padding box */
+  box-sizing: content-box;
+  padding: 18px 4px;
+  margin: -18px -4px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox__dot--active {
@@ -508,11 +561,24 @@ body.page-project :focus-visible {
   border: 0;
 }
 
+/* View Transitions API — progressive enhancement */
+::view-transition-group(lightbox-hero) {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
   .masonry picture {
     opacity: 1;
@@ -551,6 +617,15 @@ body.page-project :focus-visible {
   }
   .clients-bar__sep { display: none; }
   .project-header { flex-direction: column; align-items: flex-start; }
-  .lightbox__arrow--prev { left: -12px; }
-  .lightbox__arrow--next { right: -12px; }
+  .lightbox__arrow {
+    width: 44px;
+    height: 44px;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .lightbox__arrow--prev { left: 8px; }
+  .lightbox__arrow--next { right: 8px; }
+  .lightbox__arrow::after {
+    width: 10px;
+    height: 10px;
+  }
 }
