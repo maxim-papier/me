@@ -209,6 +209,7 @@ body.page-project :focus-visible {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
+  overflow: hidden;
 }
 
 .project-header > a {
@@ -232,10 +233,7 @@ body.page-project :focus-visible {
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* Fade hint for horizontal scroll on mobile */
-  mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
-  padding-right: 16px;
+  max-width: 100%;
 }
 
 .filter::-webkit-scrollbar { display: none; }
