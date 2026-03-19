@@ -2,6 +2,16 @@ const app = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
 
+// Reduced motion preference (reactive)
+let prefersReducedMotion = window.matchMedia(
+  "(prefers-reduced-motion: reduce)"
+).matches;
+window
+  .matchMedia("(prefers-reduced-motion: reduce)")
+  .addEventListener("change", (e) => {
+    prefersReducedMotion = e.matches;
+  });
+
 // Determine which page to render
 if (window.location.pathname.includes("project.html")) {
   if (!projectId) {
@@ -50,7 +60,9 @@ function renderIndex() {
 
     if (project.logo) {
       const logo = document.createElement("img");
-      logo.className = "clients-bar__logo" + (project.logoRound ? " clients-bar__logo--round" : "");
+      logo.className =
+        "clients-bar__logo" +
+        (project.logoRound ? " clients-bar__logo--round" : "");
       logo.src = project.logo;
       logo.alt = project.name;
       logo.width = 32;
@@ -98,7 +110,11 @@ function renderAll() {
   const allImages = [];
   for (const project of projects) {
     for (const img of project.images) {
-      allImages.push({ ...img, projectId: project.id, projectName: project.name });
+      allImages.push({
+        ...img,
+        projectId: project.id,
+        projectName: project.name,
+      });
     }
   }
 
@@ -189,7 +205,9 @@ function renderAll() {
     if (!btn) return;
     const filter = btn.dataset.filter;
     const filterType = btn.dataset.filterType;
-    nav.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+    nav
+      .querySelectorAll(".filter-btn")
+      .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     grid.querySelectorAll("picture").forEach((pic) => {
       let show = false;
@@ -243,7 +261,9 @@ function renderProject(project) {
       const btn = e.target.closest(".filter-btn");
       if (!btn) return;
       const filter = btn.dataset.filter;
-      nav.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      nav
+        .querySelectorAll(".filter-btn")
+        .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       grid.querySelectorAll("picture").forEach((pic) => {
         const show = filter === "all" || pic.dataset.cat === filter;
@@ -262,7 +282,9 @@ function renderProject(project) {
   grid.className = "masonry";
 
   const basePath = `assets/images/${project.id}`;
-  const pictures = project.images.map((img) => createPicture(img, basePath, grid));
+  const pictures = project.images.map((img) =>
+    createPicture(img, basePath, grid)
+  );
 
   for (let i = pictures.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -292,7 +314,7 @@ function createPicture(img, basePath, grid) {
     // Carousel: cover = first slide inside subfolder
     coverAvif = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.avif`;
     coverWebp = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.webp`;
-    // Store slide URLs for lightbox
+    // Store slide base paths for lightbox (without extension)
     picture.dataset.group = img.slug;
     picture.dataset.slides = JSON.stringify(
       img.slides.map((s) => `${basePath}/${img.cat}/${img.slug}/${s}`)
@@ -317,16 +339,18 @@ function createPicture(img, basePath, grid) {
   imgEl.loading = "lazy";
   imgEl.onerror = () => {
     picture.remove();
-    layoutMasonry(grid);
+    scheduleLayout(grid);
   };
 
   picture.append(sourceAvif, sourceWebp, imgEl);
 
-  // Badge for carousels with 2+ slides
+  // Badge for carousels with 2+ slides — SVG icon + count
   if (isCarousel) {
     const badge = document.createElement("span");
     badge.className = "slide-badge";
-    badge.textContent = img.slides.length;
+    badge.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="13" height="20" rx="2"/><path d="M19 4v16"/><path d="M22 7v10"/></svg> ' +
+      img.slides.length;
     picture.appendChild(badge);
   }
 
@@ -334,6 +358,16 @@ function createPicture(img, basePath, grid) {
 }
 
 // --- Shared helpers ---
+
+// RAF-debounced layout to avoid reflow per image load
+let masonryRAF = null;
+function scheduleLayout(grid) {
+  if (masonryRAF) return;
+  masonryRAF = requestAnimationFrame(() => {
+    layoutMasonry(grid);
+    masonryRAF = null;
+  });
+}
 
 function waitForImages(grid) {
   const pictures = grid.querySelectorAll("picture");
@@ -373,7 +407,7 @@ function waitForImages(grid) {
           delete img.dataset.src;
           img.addEventListener("load", () => {
             pic.classList.add("loaded");
-            layoutMasonry(grid);
+            scheduleLayout(grid);
           });
         }
 
@@ -384,7 +418,13 @@ function waitForImages(grid) {
   );
 
   pictures.forEach((pic) => observer.observe(pic));
-  window.addEventListener("resize", () => layoutMasonry(grid));
+
+  // Debounced resize handler
+  let resizeRAF = null;
+  window.addEventListener("resize", () => {
+    if (resizeRAF) cancelAnimationFrame(resizeRAF);
+    resizeRAF = requestAnimationFrame(() => layoutMasonry(grid));
+  });
 }
 
 function layoutMasonry(grid) {
@@ -395,6 +435,28 @@ function layoutMasonry(grid) {
     if (!img) return;
     pic.style.gridRowEnd = "span " + Math.ceil(img.offsetHeight + gap);
   });
+}
+
+// --- Shared dot helpers ---
+
+function renderDots(container, count, classPrefix) {
+  container.replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement("button");
+    dot.className = `${classPrefix}__dot`;
+    dot.setAttribute("aria-label", `Go to image ${i + 1}`);
+    dot.dataset.index = i;
+    container.appendChild(dot);
+  }
+}
+
+function updateDotActive(container, activeIndex, classPrefix) {
+  for (const dot of container.children) {
+    dot.classList.toggle(
+      `${classPrefix}__dot--active`,
+      +dot.dataset.index === activeIndex
+    );
+  }
 }
 
 // --- Lightbox ---
@@ -410,9 +472,17 @@ function initLightbox(grid) {
   const content = document.createElement("div");
   content.className = "lightbox__content";
 
+  // AVIF support: use <picture> with AVIF + WebP sources instead of bare <img>
+  const pictureEl = document.createElement("picture");
+  pictureEl.className = "lightbox__img-wrapper";
+  const sourceAvif = document.createElement("source");
+  sourceAvif.type = "image/avif";
+  const sourceWebp = document.createElement("source");
+  sourceWebp.type = "image/webp";
   const imgEl = document.createElement("img");
   imgEl.className = "lightbox__img";
-  content.appendChild(imgEl);
+  pictureEl.append(sourceAvif, sourceWebp, imgEl);
+  content.appendChild(pictureEl);
 
   const closeBtn = document.createElement("button");
   closeBtn.className = "lightbox__close";
@@ -441,77 +511,93 @@ function initLightbox(grid) {
   document.body.appendChild(overlay);
 
   // State
-  let slides = [];
+  let slides = []; // array of base paths (without extension)
   let currentIndex = 0;
   let triggerEl = null;
   const preloaded = new Set();
+  let loadGen = 0; // generation counter for stale decode prevention
 
-  function getSingleSrc(pic) {
-    // Prefer WebP for broad browser support in lightbox (single <img>, no <picture> fallback)
-    const webpSource = pic.querySelector("source[type='image/webp']");
-    if (webpSource) return webpSource.srcset || webpSource.dataset.srcset;
-    const anySource = pic.querySelector("source");
-    if (anySource) return anySource.srcset || anySource.dataset.srcset;
-    const imgEl = pic.querySelector("img");
-    return imgEl?.src || imgEl?.dataset.src;
+  function setSlideSrc(basePath) {
+    // Set handlers BEFORE setting src (cached images fire onload synchronously)
+    imgEl.onload = () => imgEl.classList.remove("lightbox__img--loading");
+    imgEl.onerror = () => imgEl.classList.remove("lightbox__img--loading");
+    // Set sources
+    sourceAvif.srcset = basePath + ".avif";
+    sourceWebp.srcset = basePath + ".webp";
+    imgEl.src = basePath + ".webp";
   }
 
   function preloadSlide(index) {
-    if (index < 0 || index >= slides.length || preloaded.has(index)) return;
-    preloaded.add(index);
+    // Wrap index for preloading adjacent slides with wrap-around
+    const wrappedIndex =
+      ((index % slides.length) + slides.length) % slides.length;
+    if (preloaded.has(wrappedIndex)) return;
+    preloaded.add(wrappedIndex);
     const img = new Image();
-    img.src = slides[index];
+    img.src = slides[wrappedIndex] + ".webp";
     img.decode?.().catch(() => {});
   }
 
-  function updateUI() {
+  async function updateUI() {
+    const gen = ++loadGen;
     imgEl.classList.add("lightbox__img--loading");
-    imgEl.src = slides[currentIndex];
-    imgEl.onload = () => imgEl.classList.remove("lightbox__img--loading");
-    imgEl.onerror = () => imgEl.classList.remove("lightbox__img--loading");
+    setSlideSrc(slides[currentIndex]);
 
-    // Arrows
+    // Decode with timeout race — 100ms max, then show anyway
+    try {
+      await Promise.race([
+        imgEl.decode(),
+        new Promise((_, r) => setTimeout(() => r("timeout"), 100)),
+      ]);
+    } catch {
+      /* show image anyway */
+    }
+    if (gen !== loadGen) return; // user already navigated away
+    imgEl.classList.remove("lightbox__img--loading");
+
+    // Arrows — always visible for multi-slide (wrap-around, no disabled state)
     const isMulti = slides.length > 1;
     prevBtn.style.display = isMulti ? "" : "none";
     nextBtn.style.display = isMulti ? "" : "none";
     dotsNav.style.display = isMulti ? "" : "none";
 
     if (isMulti) {
-      prevBtn.setAttribute("aria-disabled", currentIndex === 0 ? "true" : "false");
-      prevBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === 0);
-      nextBtn.setAttribute("aria-disabled", currentIndex === slides.length - 1 ? "true" : "false");
-      nextBtn.classList.toggle("lightbox__arrow--disabled", currentIndex === slides.length - 1);
+      // Wrap-around: arrows always active
+      prevBtn.setAttribute("aria-disabled", "false");
+      prevBtn.classList.remove("lightbox__arrow--disabled");
+      nextBtn.setAttribute("aria-disabled", "false");
+      nextBtn.classList.remove("lightbox__arrow--disabled");
 
-      // Dots
-      dotsNav.innerHTML = "";
-      for (let i = 0; i < slides.length; i++) {
-        const dot = document.createElement("button");
-        dot.className = "lightbox__dot" + (i === currentIndex ? " lightbox__dot--active" : "");
-        dot.setAttribute("aria-label", `Go to image ${i + 1}`);
-        dot.dataset.index = i;
-        dotsNav.appendChild(dot);
-      }
+      // Update dot active state (dots created once in open())
+      updateDotActive(dotsNav, currentIndex, "lightbox");
 
       liveRegion.textContent = `Image ${currentIndex + 1} of ${slides.length}`;
-      overlay.setAttribute("aria-label", `Image ${currentIndex + 1} of ${slides.length}`);
+      overlay.setAttribute(
+        "aria-label",
+        `Image ${currentIndex + 1} of ${slides.length}`
+      );
     }
 
-    // Preload adjacent
+    // Preload adjacent (with wrap-around)
     preloadSlide(currentIndex + 1);
     preloadSlide(currentIndex - 1);
   }
 
   function goTo(index) {
-    if (index < 0 || index >= slides.length) return;
-    currentIndex = index;
+    // Wrap-around with modular arithmetic
+    if (slides.length === 0) return;
+    currentIndex =
+      ((index % slides.length) + slides.length) % slides.length;
     updateUI();
   }
 
   function setBackgroundInert(inert) {
-    document.querySelectorAll(".masonry, .project-header, #app").forEach((el) => {
-      if (inert) el.setAttribute("inert", "");
-      else el.removeAttribute("inert");
-    });
+    document
+      .querySelectorAll(".masonry, .project-header, #app")
+      .forEach((el) => {
+        if (inert) el.setAttribute("inert", "");
+        else el.removeAttribute("inert");
+      });
   }
 
   function open(slideUrls, startIndex, trigger) {
@@ -520,8 +606,16 @@ function initLightbox(grid) {
     triggerEl = trigger;
     preloaded.clear();
     preloaded.add(currentIndex);
+
+    // Create dots once (not on every navigation)
+    if (slides.length > 1) {
+      renderDots(dotsNav, slides.length, "lightbox");
+    } else {
+      dotsNav.replaceChildren();
+    }
+
     updateUI();
-    // Set liveRegion for single images too
+
     if (slides.length === 1) {
       liveRegion.textContent = "Image viewer";
       overlay.setAttribute("aria-label", "Image viewer");
@@ -538,13 +632,22 @@ function initLightbox(grid) {
   }
 
   // Event handlers
-  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    close();
+  });
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay || e.target === content) close();
   });
 
-  prevBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex - 1); });
-  nextBtn.addEventListener("click", (e) => { e.stopPropagation(); goTo(currentIndex + 1); });
+  prevBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    goTo(currentIndex - 1);
+  });
+  nextBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    goTo(currentIndex + 1);
+  });
 
   dotsNav.addEventListener("click", (e) => {
     const dot = e.target.closest(".lightbox__dot");
@@ -560,8 +663,10 @@ function initLightbox(grid) {
     if (e.key === "ArrowRight") goTo(currentIndex + 1);
   });
 
-  // Swipe support (Phase 4)
-  let pointerStartX = 0, pointerStartY = 0, isDragging = false;
+  // Swipe support — adaptive threshold
+  let pointerStartX = 0,
+    pointerStartY = 0,
+    isDragging = false;
 
   overlay.addEventListener("pointerdown", (e) => {
     if (e.target.closest("button")) return;
@@ -576,13 +681,17 @@ function initLightbox(grid) {
     isDragging = false;
     const dx = e.clientX - pointerStartX;
     const dy = e.clientY - pointerStartY;
-    if (Math.abs(dx) < 50) return;
+    // Adaptive threshold: 15% of viewport width, minimum 50px
+    const threshold = Math.max(50, window.innerWidth * 0.15);
+    if (Math.abs(dx) < threshold) return;
     if (Math.abs(dy) > Math.abs(dx)) return;
     if (dx < 0) goTo(currentIndex + 1);
     else goTo(currentIndex - 1);
   });
 
-  overlay.addEventListener("pointercancel", () => { isDragging = false; });
+  overlay.addEventListener("pointercancel", () => {
+    isDragging = false;
+  });
 
   // Grid click handler
   grid.addEventListener("click", (e) => {
@@ -591,16 +700,21 @@ function initLightbox(grid) {
 
     const slidesData = pic.dataset.slides;
     if (slidesData) {
-      // Carousel: open with all slide URLs (webp for broad browser support)
+      // Carousel: open with all slide base paths (AVIF+WebP handled by <picture>)
       let baseSlugs;
-      try { baseSlugs = JSON.parse(slidesData); } catch { return; }
-      const urls = baseSlugs.map((s) => s + ".webp");
-      open(urls, 0, pic);
+      try {
+        baseSlugs = JSON.parse(slidesData);
+      } catch {
+        return;
+      }
+      open(baseSlugs, 0, pic);
     } else {
-      // Single image
-      const src = getSingleSrc(pic);
-      if (!src) return;
-      open([src], 0, pic);
+      // Single image: extract base path (without extension)
+      const webpSource = pic.querySelector("source[type='image/webp']");
+      const srcset = webpSource?.srcset || webpSource?.dataset?.srcset;
+      if (!srcset) return;
+      const basePath = srcset.replace(/\.webp$/, "");
+      open([basePath], 0, pic);
     }
   });
 }

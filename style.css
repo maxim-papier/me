@@ -294,6 +294,13 @@ body.page-project :focus-visible {
   z-index: 1;
   line-height: 1.4;
   transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slide-badge svg {
+  flex-shrink: 0;
 }
 
 .masonry img {
@@ -512,7 +519,9 @@ body.page-project :focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
   .masonry picture {
     opacity: 1;
