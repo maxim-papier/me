@@ -12,6 +12,68 @@ window
     prefersReducedMotion = e.matches;
   });
 
+// --- Drag physics helpers (must be before routing code — classes aren't hoisted) ---
+
+class VelocityTracker {
+  constructor() {
+    this.history = [];
+  }
+  add(x, time) {
+    this.history.push({ x, time });
+    const cutoff = time - 100;
+    while (this.history.length > 5 || this.history[0]?.time < cutoff)
+      this.history.shift();
+  }
+  get() {
+    const h = this.history;
+    if (h.length < 2) return 0;
+    const dt = h[h.length - 1].time - h[0].time;
+    if (dt === 0) return 0;
+    return (h[h.length - 1].x - h[0].x) / dt;
+  }
+  reset() {
+    this.history = [];
+  }
+}
+
+function shouldSnap(displacement, velocity, containerWidth) {
+  const VELOCITY_THRESHOLD = 0.5;
+  const DISTANCE_THRESHOLD = 0.35;
+  const velocityOK = Math.abs(velocity) > VELOCITY_THRESHOLD;
+  const distanceOK =
+    Math.abs(displacement) > containerWidth * DISTANCE_THRESHOLD;
+  const sameDirection =
+    Math.sign(displacement) === Math.sign(velocity) || velocity === 0;
+  return (velocityOK || distanceOK) && sameDirection;
+}
+
+function springAnimate({ from, to, velocity = 0, stiffness = 200, damping = 20, onUpdate, onComplete }) {
+  let position = from;
+  let v = velocity;
+  let lastTime = performance.now();
+  let rafId = null;
+  function tick(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.064);
+    lastTime = now;
+    const force = -stiffness * (position - to) - damping * v;
+    v += force * dt;
+    position += v * dt;
+    onUpdate(position);
+    if (Math.abs(position - to) < 0.5 && Math.abs(v) < 0.1) {
+      onUpdate(to);
+      onComplete?.();
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  rafId = requestAnimationFrame(tick);
+  return () => { if (rafId) cancelAnimationFrame(rafId); };
+}
+
+function rubberBand(offset, dimension) {
+  return (1 - 1 / ((offset * 0.55) / dimension + 1)) * dimension;
+}
+
 // Determine which page to render
 if (window.location.pathname.includes("project.html")) {
   if (!projectId) {
@@ -339,7 +401,7 @@ function createPicture(img, basePath, grid) {
   imgEl.loading = "lazy";
   imgEl.onerror = () => {
     picture.remove();
-    scheduleLayout(grid);
+    layoutMasonry(grid);
   };
 
   picture.append(sourceAvif, sourceWebp, imgEl);
@@ -358,16 +420,6 @@ function createPicture(img, basePath, grid) {
 }
 
 // --- Shared helpers ---
-
-// RAF-debounced layout to avoid reflow per image load
-let masonryRAF = null;
-function scheduleLayout(grid) {
-  if (masonryRAF) return;
-  masonryRAF = requestAnimationFrame(() => {
-    layoutMasonry(grid);
-    masonryRAF = null;
-  });
-}
 
 function waitForImages(grid) {
   const pictures = grid.querySelectorAll("picture");
@@ -403,12 +455,18 @@ function waitForImages(grid) {
         });
 
         if (img && img.dataset.src) {
-          img.src = img.dataset.src;
-          delete img.dataset.src;
+          // Set handler BEFORE src — cached images fire onload synchronously
           img.addEventListener("load", () => {
             pic.classList.add("loaded");
-            scheduleLayout(grid);
+            layoutMasonry(grid);
           });
+          img.src = img.dataset.src;
+          delete img.dataset.src;
+          // Handle already-complete images (race: loaded before observer fired)
+          if (img.complete && img.naturalHeight > 0) {
+            pic.classList.add("loaded");
+            layoutMasonry(grid);
+          }
         }
 
         observer.unobserve(pic);
@@ -419,12 +477,7 @@ function waitForImages(grid) {
 
   pictures.forEach((pic) => observer.observe(pic));
 
-  // Debounced resize handler
-  let resizeRAF = null;
-  window.addEventListener("resize", () => {
-    if (resizeRAF) cancelAnimationFrame(resizeRAF);
-    resizeRAF = requestAnimationFrame(() => layoutMasonry(grid));
-  });
+  window.addEventListener("resize", () => layoutMasonry(grid));
 }
 
 function layoutMasonry(grid) {
@@ -457,68 +510,6 @@ function updateDotActive(container, activeIndex, classPrefix) {
       +dot.dataset.index === activeIndex
     );
   }
-}
-
-// --- Drag physics helpers ---
-
-class VelocityTracker {
-  constructor() {
-    this.history = [];
-  }
-  add(x, time) {
-    this.history.push({ x, time });
-    const cutoff = time - 100;
-    while (this.history.length > 5 || this.history[0]?.time < cutoff)
-      this.history.shift();
-  }
-  get() {
-    const h = this.history;
-    if (h.length < 2) return 0;
-    const dt = h[h.length - 1].time - h[0].time;
-    if (dt === 0) return 0;
-    return (h[h.length - 1].x - h[0].x) / dt;
-  }
-  reset() {
-    this.history = [];
-  }
-}
-
-function shouldSnap(displacement, velocity, containerWidth) {
-  const VELOCITY_THRESHOLD = 0.5; // px/ms
-  const DISTANCE_THRESHOLD = 0.35; // 35% of container width
-  const velocityOK = Math.abs(velocity) > VELOCITY_THRESHOLD;
-  const distanceOK =
-    Math.abs(displacement) > containerWidth * DISTANCE_THRESHOLD;
-  const sameDirection =
-    Math.sign(displacement) === Math.sign(velocity) || velocity === 0;
-  return (velocityOK || distanceOK) && sameDirection;
-}
-
-function springAnimate({ from, to, velocity = 0, stiffness = 200, damping = 20, onUpdate, onComplete }) {
-  let position = from;
-  let v = velocity;
-  let lastTime = performance.now();
-  let rafId = null;
-  function tick(now) {
-    const dt = Math.min((now - lastTime) / 1000, 0.064);
-    lastTime = now;
-    const force = -stiffness * (position - to) - damping * v;
-    v += force * dt;
-    position += v * dt;
-    onUpdate(position);
-    if (Math.abs(position - to) < 0.5 && Math.abs(v) < 0.1) {
-      onUpdate(to);
-      onComplete?.();
-      return;
-    }
-    rafId = requestAnimationFrame(tick);
-  }
-  rafId = requestAnimationFrame(tick);
-  return () => { if (rafId) cancelAnimationFrame(rafId); };
-}
-
-function rubberBand(offset, dimension) {
-  return (1 - 1 / ((offset * 0.55) / dimension + 1)) * dimension;
 }
 
 // --- Lightbox ---
@@ -910,8 +901,19 @@ function initLightbox(grid) {
     }
   }
 
-  overlay.addEventListener("pointerdown", onPointerDown);
-  overlay.addEventListener("pointermove", onPointerMove);
+  // Track whether the pointer moved (to distinguish click from drag)
+  let pointerMoved = false;
+
+  overlay.addEventListener("pointerdown", (e) => {
+    pointerMoved = false;
+    onPointerDown(e);
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    if (dragState === STATE_DRAGGING && Math.abs(e.clientX - dragStartX) > 5) {
+      pointerMoved = true;
+    }
+    onPointerMove(e);
+  });
   overlay.addEventListener("pointerup", onPointerUp);
   overlay.addEventListener("pointercancel", onPointerCancel);
 
@@ -977,57 +979,23 @@ function initLightbox(grid) {
       overlay.setAttribute("aria-label", "Image viewer");
     }
     overlay.classList.add("lightbox--open");
+    document.body.style.overflow = "hidden";
     setBackgroundInert(true);
     closeBtn.focus();
   }
 
   function open(slideUrls, startIndex, trigger) {
     triggerEl = trigger;
-
-    // View Transitions API — progressive enhancement
-    if (document.startViewTransition && !prefersReducedMotion) {
-      const myTrigger = trigger;
-      myTrigger.style.viewTransitionName = "lightbox-hero";
-      const transition = document.startViewTransition(() => {
-        openDOM(slideUrls, startIndex);
-        // setSlide must be synchronous inside callback
-        stage.style.viewTransitionName = "lightbox-hero";
-        myTrigger.style.viewTransitionName = "";
-      });
-      transition.finished.finally(() => {
-        stage.style.viewTransitionName = "";
-      });
-    } else {
-      openDOM(slideUrls, startIndex);
-    }
-  }
-
-  function closeDOM() {
-    ++transitionGen;
-    forceToIdle();
-    overlay.classList.remove("lightbox--open");
-    setBackgroundInert(false);
+    openDOM(slideUrls, startIndex);
   }
 
   function close() {
-    if (document.startViewTransition && !prefersReducedMotion && triggerEl) {
-      // Scroll thumbnail into view before transition
-      triggerEl.scrollIntoView({ behavior: "instant", block: "nearest" });
-      stage.style.viewTransitionName = "lightbox-hero";
-      const myTrigger = triggerEl;
-      const transition = document.startViewTransition(() => {
-        closeDOM();
-        myTrigger.style.viewTransitionName = "lightbox-hero";
-        stage.style.viewTransitionName = "";
-      });
-      transition.finished.finally(() => {
-        myTrigger.style.viewTransitionName = "";
-        triggerEl?.focus();
-      });
-    } else {
-      closeDOM();
-      triggerEl?.focus();
-    }
+    ++transitionGen;
+    forceToIdle();
+    overlay.classList.remove("lightbox--open");
+    document.body.style.overflow = "";
+    setBackgroundInert(false);
+    triggerEl?.focus();
   }
 
   // Event handlers
@@ -1037,7 +1005,11 @@ function initLightbox(grid) {
   });
   overlay.addEventListener("click", (e) => {
     if (dragState !== STATE_IDLE) return;
-    if (e.target === overlay || e.target === content || e.target === stage) close();
+    // Don't close if user was dragging/swiping
+    if (pointerMoved) return;
+    // Close on click anywhere except nav buttons (arrows, dots)
+    if (e.target.closest("button")) return;
+    close();
   });
 
   prevBtn.addEventListener("click", (e) => {
@@ -1058,7 +1030,11 @@ function initLightbox(grid) {
 
   document.addEventListener("keydown", (e) => {
     if (!overlay.classList.contains("lightbox--open")) return;
-    if (e.key === "Escape") close();
+    if (e.key === "Escape") {
+      // Prevent browser from exiting fullscreen — close lightbox first
+      e.preventDefault();
+      close();
+    }
     if (e.key === "ArrowLeft") goTo(currentIndex - 1);
     if (e.key === "ArrowRight") goTo(currentIndex + 1);
   });

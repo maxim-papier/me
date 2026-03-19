@@ -229,7 +229,16 @@ body.page-project :focus-visible {
 .filter {
   display: flex;
   gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Fade hint for horizontal scroll on mobile */
+  mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+  padding-right: 16px;
 }
+
+.filter::-webkit-scrollbar { display: none; }
 
 .filter-btn {
   background: none;
@@ -242,6 +251,12 @@ body.page-project :focus-visible {
   color: #888;
   cursor: pointer;
   transition: color var(--transition), background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* Min 44px touch target */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 .filter-btn:hover {
@@ -260,6 +275,7 @@ body.page-project :focus-visible {
   align-self: stretch;
   background: #333;
   margin: 4px 4px;
+  flex-shrink: 0;
 }
 
 /* Masonry grid */
@@ -354,7 +370,7 @@ body.page-project :focus-visible {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
-  touch-action: pan-y;
+  touch-action: none;
   user-select: none;
 }
 
@@ -518,6 +534,11 @@ body.page-project :focus-visible {
   cursor: pointer;
   padding: 0;
   transition: background var(--transition);
+  /* 44px touch target via transparent padding box */
+  box-sizing: content-box;
+  padding: 18px 4px;
+  margin: -18px -4px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox__dot--active {
@@ -596,6 +617,15 @@ body.page-project :focus-visible {
   }
   .clients-bar__sep { display: none; }
   .project-header { flex-direction: column; align-items: flex-start; }
-  .lightbox__arrow--prev { left: -12px; }
-  .lightbox__arrow--next { right: -12px; }
+  .lightbox__arrow {
+    width: 44px;
+    height: 44px;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .lightbox__arrow--prev { left: 8px; }
+  .lightbox__arrow--next { right: 8px; }
+  .lightbox__arrow::after {
+    width: 10px;
+    height: 10px;
+  }
 }
