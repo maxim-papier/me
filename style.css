@@ -372,23 +372,48 @@ body.page-project :focus-visible {
   max-height: 90vh;
 }
 
-.lightbox__img {
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
+.lightbox__stage {
+  position: relative;
+  overflow: hidden;
   border-radius: 4px;
   transform: scale(0.95);
-  transition: transform 0.3s ease, opacity 0.25s ease;
-  position: relative;
+  transition: transform 0.3s ease;
   z-index: 0;
 }
 
-.lightbox--open .lightbox__img {
+.lightbox--open .lightbox__stage {
   transform: scale(1);
 }
 
-.lightbox__img--loading {
+.lightbox__slide {
+  display: block;
+}
+
+.lightbox__slide--incoming {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lightbox__slide-img {
+  display: block;
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  transition: opacity 0.25s ease;
+}
+
+.lightbox__slide--loading .lightbox__slide-img,
+.lightbox__slide--loading img {
   opacity: 0.4;
+}
+
+/* Disable backdrop-filter on arrows during drag for GPU performance */
+.lightbox--dragging .lightbox__arrow {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .lightbox__close {
