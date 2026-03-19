@@ -540,6 +540,17 @@ body.page-project :focus-visible {
   border: 0;
 }
 
+/* View Transitions API — progressive enhancement */
+::view-transition-group(lightbox-hero) {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -942,9 +942,8 @@ function initLightbox(grid) {
       });
   }
 
-  function open(slideUrls, startIndex, trigger) {
+  function openDOM(slideUrls, startIndex) {
     slides = slideUrls;
-    triggerEl = trigger;
     preloaded.clear();
 
     // Reset slide elements
@@ -982,12 +981,53 @@ function initLightbox(grid) {
     closeBtn.focus();
   }
 
-  function close() {
+  function open(slideUrls, startIndex, trigger) {
+    triggerEl = trigger;
+
+    // View Transitions API — progressive enhancement
+    if (document.startViewTransition && !prefersReducedMotion) {
+      const myTrigger = trigger;
+      myTrigger.style.viewTransitionName = "lightbox-hero";
+      const transition = document.startViewTransition(() => {
+        openDOM(slideUrls, startIndex);
+        // setSlide must be synchronous inside callback
+        stage.style.viewTransitionName = "lightbox-hero";
+        myTrigger.style.viewTransitionName = "";
+      });
+      transition.finished.finally(() => {
+        stage.style.viewTransitionName = "";
+      });
+    } else {
+      openDOM(slideUrls, startIndex);
+    }
+  }
+
+  function closeDOM() {
     ++transitionGen;
     forceToIdle();
     overlay.classList.remove("lightbox--open");
     setBackgroundInert(false);
-    triggerEl?.focus();
+  }
+
+  function close() {
+    if (document.startViewTransition && !prefersReducedMotion && triggerEl) {
+      // Scroll thumbnail into view before transition
+      triggerEl.scrollIntoView({ behavior: "instant", block: "nearest" });
+      stage.style.viewTransitionName = "lightbox-hero";
+      const myTrigger = triggerEl;
+      const transition = document.startViewTransition(() => {
+        closeDOM();
+        myTrigger.style.viewTransitionName = "lightbox-hero";
+        stage.style.viewTransitionName = "";
+      });
+      transition.finished.finally(() => {
+        myTrigger.style.viewTransitionName = "";
+        triggerEl?.focus();
+      });
+    } else {
+      closeDOM();
+      triggerEl?.focus();
+    }
   }
 
   // Event handlers
