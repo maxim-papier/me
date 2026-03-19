@@ -49,7 +49,6 @@ const projects = [
       { slug: "se-digest-cover-october", cat: "social-media" },
       { slug: "se-digest-cover-september", cat: "social-media" },
       { slug: "subscribe-vertical", cat: "social-media" },
-      { slug: "yt-com", cat: "social-media" },
       { slug: "evolution-of-licensing", cat: "social-media", slides: ["1980","1990","2000","2010","2020","2030"] },
       { slug: "35-licensing-cost-increase", cat: "yt" },
       { slug: "agent-365-how-microsoft-plans-to-monetize-your-digital-workforce", cat: "yt" },
