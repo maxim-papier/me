@@ -49,14 +49,14 @@ fi
 log "$OUTPUT"
 
 # Check if there are actual changes to commit
-if git diff --quiet assets/images/ data/projects.js 2>/dev/null && \
-   git diff --cached --quiet assets/images/ data/projects.js 2>/dev/null; then
+if git diff --quiet assets/images/ data/projects.js index.html project.html 2>/dev/null && \
+   git diff --cached --quiet assets/images/ data/projects.js index.html project.html 2>/dev/null; then
   log "No changes to commit (publish ran but produced no diff)"
   exit 0
 fi
 
 # Stage and commit
-git add assets/images/ data/projects.js
+git add assets/images/ data/projects.js index.html project.html
 git commit -m "feat(content): auto-publish new images"
 
 # Push

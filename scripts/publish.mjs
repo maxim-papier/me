@@ -10,7 +10,7 @@
  * Usage: node scripts/publish.mjs
  */
 
-import { readdir, mkdir, unlink, writeFile, rmdir, stat } from "node:fs/promises";
+import { readdir, mkdir, unlink, writeFile, readFile, rmdir, stat } from "node:fs/promises";
 import { join, parse } from "node:path";
 import sharp from "sharp";
 
@@ -329,6 +329,23 @@ async function regenerateData() {
   console.log(`\n✓ ${DATA_FILE} regenerated (${projectsData.reduce((s, p) => s + p.images.length, 0)} images total)`);
 }
 
+// --- Step 3: Cache-bust projects.js in HTML files ---
+
+async function cacheBustHTML() {
+  const version = `v=${Date.now()}`;
+  const htmlFiles = ["index.html", "project.html"];
+
+  for (const file of htmlFiles) {
+    let html = await readFile(file, "utf-8");
+    html = html.replace(
+      /src="data\/projects\.js[^"]*"/,
+      `src="data/projects.js?${version}"`
+    );
+    await writeFile(file, html);
+  }
+  console.log(`✓ Cache-busted HTML files (${version})`);
+}
+
 // --- Main ---
 
 const { total: optimized, newProjects, newCategories } = await processInbox();
@@ -338,6 +355,7 @@ if (optimized > 0) {
 }
 
 await regenerateData();
+await cacheBustHTML();
 
 // Summary with warnings for Claude / user
 if (newProjects.length > 0 || newCategories.length > 0) {
