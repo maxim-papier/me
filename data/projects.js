@@ -12,6 +12,8 @@ const projects = [
       { slug: "agent-365-a-licensing-puzzle", cat: "articles" },
       { slug: "agent-365", cat: "articles" },
       { slug: "agents-era", cat: "articles" },
+      { slug: "case-study-spla-audit-defence-pwc-cloud-provider", cat: "articles" },
+      { slug: "case-study-spla-self-assessment-compliance-defence-feb-2025", cat: "articles" },
       { slug: "enterprise-platform-wars-2025", cat: "articles" },
       { slug: "from-floppy-disks-to-cloud-subscriptions", cat: "articles" },
       { slug: "fy25-q3-financial-report-article", cat: "articles" },
