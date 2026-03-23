@@ -5,6 +5,10 @@ inbox/
 # OS
 .DS_Store
 
+# Auto-publish logs
+scripts/.auto-publish*.log
+scripts/.auto-publish.lock
+
 # Node (for image optimization script)
 node_modules/
 package*.json
