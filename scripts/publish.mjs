@@ -172,7 +172,7 @@ async function processInbox() {
 
       // Scan for loose files and @-carousel folders
       const catEntries = await readdir(srcDir, { withFileTypes: true });
-      const looseFiles = catEntries.filter((e) => e.isFile() && /\.(png|jpe?g)$/i.test(e.name));
+      const looseFiles = catEntries.filter((e) => e.isFile() && /\.(png|jpe?g|webp)$/i.test(e.name));
       const subDirs = catEntries.filter((e) => e.isDirectory());
 
       // Process loose images (single images, as before)
@@ -199,7 +199,7 @@ async function processInbox() {
 
         const carouselDir = join(srcDir, sub.name);
         const slideFiles = (await readdir(carouselDir))
-          .filter((f) => /\.(png|jpe?g)$/i.test(f))
+          .filter((f) => /\.(png|jpe?g|webp)$/i.test(f))
           .sort();
 
         if (slideFiles.length === 0) {

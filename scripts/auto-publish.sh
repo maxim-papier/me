@@ -32,7 +32,7 @@ trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT
 sleep 5
 
 # Check if there are publishable files in inbox
-INBOX_FILE=$(find inbox -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) -print -quit 2>/dev/null)
+INBOX_FILE=$(find inbox -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.webp' \) -print -quit 2>/dev/null)
 if [ -z "$INBOX_FILE" ]; then
   exit 0
 fi
