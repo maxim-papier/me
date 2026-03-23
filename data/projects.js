@@ -103,6 +103,7 @@ const projects = [
       { slug: "how-to-avoid-ibm-software-audit-penalties", cat: "articles" },
       { slug: "how-to-better-negotiate-your-ibm-ela-renewals", cat: "articles" },
       { slug: "how-to-evaluate-ibm-s-client-value-acceleration-program", cat: "articles" },
+      { slug: "how-to-identify-and-eliminate-ibm-license-shelfware", cat: "articles" },
       { slug: "how-to-identify-and-eliminate-ibm-license-waste", cat: "articles" },
       { slug: "how-to-prepare-for-a-software-licensing-audit", cat: "articles" },
       { slug: "ibm-informix-licensing-the-confusion-around-warm-idle-and-cold-standby-servers", cat: "articles" },
