@@ -129,6 +129,7 @@ const projects = [
       { slug: "what-is-ibm-cva-the-client-value-acceleration-program-explained", cat: "articles" },
       { slug: "what-to-do-when-ibm-increases-license-costs", cat: "articles" },
       { slug: "when-to-rethink-your-ibm-license-strategy-7-critical-scenarios", cat: "articles" },
+      { slug: "lh-subsc-feb", cat: "social-media" },
       { slug: "lh-subsc-mach26", cat: "social-media" },
       { slug: "avoid-ibm-cva-surprises-with-an-internal-audit", cat: "yt" },
       { slug: "bm-ela-renewals-why-early-action-gives-you-negotiation-power", cat: "yt" },
