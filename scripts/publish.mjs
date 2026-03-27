@@ -42,6 +42,7 @@ const PROJECT_META = {
     logoRound: true,
     categoryLabels: {
       articles: "Articles",
+      "social-media": "Social Media",
       yt: "YouTube",
     },
   },
@@ -52,6 +53,14 @@ const PROJECT_META = {
       "social-media": "Social Media",
       yt: "YouTube",
       print: "Print",
+    },
+  },
+  itsmtools: {
+    name: "ITSM.Tools",
+    logo: "assets/logos/itsmtools.svg",
+    categoryLabels: {
+      articles: "Articles",
+      "social-media": "Social Media",
     },
   },
 };
