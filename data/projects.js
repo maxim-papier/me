@@ -98,6 +98,7 @@ const projects = [
       { slug: "blog-cva-audit-defense-common-compliance-issues-for-early-adopters", cat: "articles" },
       { slug: "blog-ibm-saas-licensing-pitfalls-and-strategies-for-smarter-management", cat: "articles" },
       { slug: "blog-project-managing-an-ibm-license-audit", cat: "articles" },
+      { slug: "case-study-ibm-license-risk-assessment-uncovering-1m-in-savings-opportunities-2", cat: "articles" },
       { slug: "case-study-ibm-license-risk-assessment-uncovering-1m-in-savings-opportunities", cat: "articles" },
       { slug: "common-ilmt-disconnected-scanner-issues-and-fixes", cat: "articles" },
       { slug: "cutting-ibm-license-waste-tools-and-tactics-that-work", cat: "articles" },
