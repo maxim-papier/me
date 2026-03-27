@@ -198,6 +198,8 @@ const projects = [
       "social-media": "Social Media",
     },
     images: [
+      { slug: "service-management-roundup-feb26", cat: "social-media" },
+      { slug: "service-management-roundup-jan2", cat: "social-media" },
       { slug: "service-management-roundup", cat: "social-media" },
     ],
   },
