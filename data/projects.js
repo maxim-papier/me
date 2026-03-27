@@ -190,4 +190,15 @@ const projects = [
       { slug: "leaflet-dex", cat: "print", slides: ["2-leaflet-front-dex","2-leaflet-front-dex-1"] },
     ],
   },
+  {
+    id: "itsmtools",
+    name: "ITSM.Tools",
+    logo: "assets/logos/itsmtools.svg",
+    categories: {
+      "social-media": "Social Media",
+    },
+    images: [
+      { slug: "service-management-roundup", cat: "social-media" },
+    ],
+  },
 ];
