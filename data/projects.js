@@ -23,6 +23,7 @@ const projects = [
       { slug: "microsoft-eliminated-large-organisation-discounts", cat: "articles" },
       { slug: "microsoft-faces-renewed-antitrust-scrutiny-amid-changing-political-winds", cat: "articles" },
       { slug: "microsoft-s-ai-money-machine", cat: "articles" },
+      { slug: "microsoft-s-copilot-reorganisation", cat: "articles" },
       { slug: "microsoft-s-trust-crisis", cat: "articles" },
       { slug: "microsoft-spla-explained", cat: "articles" },
       { slug: "premier-support-vs-unified-support", cat: "articles" },
