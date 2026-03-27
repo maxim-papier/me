@@ -368,6 +368,7 @@ function renderProject(project) {
 function createPicture(img, basePath, grid) {
   const picture = document.createElement("picture");
   picture.dataset.cat = img.cat;
+  picture.dataset.slug = img.slug;
 
   const isCarousel = img.slides && img.slides.length > 1;
   let coverAvif, coverWebp;
@@ -987,6 +988,29 @@ function initLightbox(grid) {
   function open(slideUrls, startIndex, trigger) {
     triggerEl = trigger;
     openDOM(slideUrls, startIndex);
+    // Deep link: update URL hash with image slug
+    const slug = trigger?.dataset?.slug;
+    if (slug) {
+      const project = trigger.dataset.project;
+      const fragment = project
+        ? `${encodeURIComponent(project)}/${encodeURIComponent(slug)}`
+        : encodeURIComponent(slug);
+      history.replaceState(null, "", `#img=${fragment}`);
+    }
+  }
+
+  // Extract slide URLs from a picture element and open lightbox
+  function openFromPicture(pic) {
+    const slidesData = pic.dataset.slides;
+    if (slidesData) {
+      try {
+        open(JSON.parse(slidesData), 0, pic);
+      } catch {}
+    } else {
+      const webpSource = pic.querySelector("source[type='image/webp']");
+      const srcset = webpSource?.srcset || webpSource?.dataset?.srcset;
+      if (srcset) open([srcset.replace(/\.webp$/, "")], 0, pic);
+    }
   }
 
   function close() {
@@ -996,6 +1020,10 @@ function initLightbox(grid) {
     document.body.style.overflow = "";
     setBackgroundInert(false);
     triggerEl?.focus();
+    // Deep link: clear hash
+    if (location.hash.startsWith("#img=")) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
   }
 
   // Event handlers
@@ -1043,24 +1071,26 @@ function initLightbox(grid) {
   grid.addEventListener("click", (e) => {
     const pic = e.target.closest("picture");
     if (!pic || pic.closest(".lightbox")) return;
-
-    const slidesData = pic.dataset.slides;
-    if (slidesData) {
-      let baseSlugs;
-      try {
-        baseSlugs = JSON.parse(slidesData);
-      } catch {
-        return;
-      }
-      open(baseSlugs, 0, pic);
-    } else {
-      const webpSource = pic.querySelector("source[type='image/webp']");
-      const srcset = webpSource?.srcset || webpSource?.dataset?.srcset;
-      if (!srcset) return;
-      const basePath = srcset.replace(/\.webp$/, "");
-      open([basePath], 0, pic);
-    }
+    openFromPicture(pic);
   });
+
+  // Deep link: open lightbox if URL has #img=slug or #img=project/slug
+  const hashMatch = location.hash.match(/^#img=(.+)/);
+  if (hashMatch) {
+    const raw = decodeURIComponent(hashMatch[1]);
+    const slashIdx = raw.indexOf("/");
+    let selector;
+    if (slashIdx !== -1) {
+      // Format: project/slug (used in "all" view)
+      const project = raw.slice(0, slashIdx);
+      const slug = raw.slice(slashIdx + 1);
+      selector = `picture[data-project="${CSS.escape(project)}"][data-slug="${CSS.escape(slug)}"]`;
+    } else {
+      selector = `picture[data-slug="${CSS.escape(raw)}"]`;
+    }
+    const pic = grid.querySelector(selector);
+    if (pic) openFromPicture(pic);
+  }
 }
 
 function renderNotFound() {
