@@ -121,6 +121,7 @@ const projects = [
       { slug: "ibm-license-audit-management-guide-1", cat: "articles" },
       { slug: "ibm-license-audit-management-guide", cat: "articles" },
       { slug: "ibm-license-risk-when-vms-wander-around-the-server-farm", cat: "articles" },
+      { slug: "ibm-licensing-vs-oracle-licensing-what-your-organization-needs-to-know", cat: "articles" },
       { slug: "ibm-passport-advantage-explained", cat: "articles" },
       { slug: "ibm-saas-licensing-7-costly-mistakes-and-how-to-avoid-them", cat: "articles" },
       { slug: "licensehawk-ibm-internal-audit-success-story", cat: "articles" },
