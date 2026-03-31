@@ -69,6 +69,7 @@ const projects = [
       { slug: "four-types-of-microsoft-audits-for-service-providers", cat: "yt" },
       { slug: "internal-risks-in-microsoft-negotiations", cat: "yt" },
       { slug: "maximise-hosting-revenue-with-csp-hosting-and-azure-arc", cat: "yt" },
+      { slug: "microsoft-audit-red-flags-are-you-already-on-the-list", cat: "yt" },
       { slug: "microsoft-audit-survival-guide-for-cloud-infrastructure-providers", cat: "yt" },
       { slug: "microsoft-audits-it-s-not-if-it-s-when", cat: "yt" },
       { slug: "microsoft-dropped-enterprise-discounts-qa-session", cat: "yt" },
