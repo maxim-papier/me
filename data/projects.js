@@ -166,6 +166,7 @@ const projects = [
       "print": "Print",
     },
     images: [
+      { slug: "130-spark26-reflections-and-the-road-to-sits", cat: "social-media" },
       { slug: "brc-welcome-to-the-team-ian", cat: "social-media" },
       { slug: "brc-welcome-to-the-team-rosemary", cat: "social-media" },
       { slug: "director-of-it", cat: "social-media" },
