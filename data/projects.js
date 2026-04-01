@@ -166,6 +166,7 @@ const projects = [
       "print": "Print",
     },
     images: [
+      { slug: "130-spark26-reflections-and-the-road-to-sits", cat: "social-media" },
       { slug: "brc-welcome-to-the-team-ian", cat: "social-media" },
       { slug: "brc-welcome-to-the-team-rosemary", cat: "social-media" },
       { slug: "director-of-it", cat: "social-media" },
@@ -197,6 +198,7 @@ const projects = [
       { slug: "episode-127-yt", cat: "yt" },
       { slug: "episode-128-yt", cat: "yt" },
       { slug: "episode-129-yt", cat: "yt" },
+      { slug: "episode-130-yt", cat: "yt" },
       { slug: "yt-episode-118", cat: "yt" },
       { slug: "yt-episode-119", cat: "yt" },
       { slug: "yt-episode-121-23", cat: "yt" },
