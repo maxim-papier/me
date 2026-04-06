@@ -2,10 +2,11 @@
 /**
  * Publishes images from inbox/ to the portfolio.
  *
- * 1. Scans inbox/{project}/{category}/ for PNG/JPG files
- * 2. Optimizes to AVIF + WebP in assets/images/{project}/{category}/
- * 3. Regenerates data/projects.js from filesystem
- * 4. Cleans up inbox
+ * 1. Scans inbox/{project}/{category}/ for PNG/JPG/WebP files and @-prefixed PDF carousels
+ * 2. Renders PDF pages to images via pdfjs-dist + @napi-rs/canvas
+ * 3. Optimizes to AVIF + WebP in assets/images/{project}/{category}/
+ * 4. Regenerates data/projects.js from filesystem
+ * 5. Cleans up inbox
  *
  * Usage: node scripts/publish.mjs
  */
@@ -13,6 +14,8 @@
 import { readdir, mkdir, unlink, writeFile, readFile, rmdir, stat } from "node:fs/promises";
 import { join, parse } from "node:path";
 import sharp from "sharp";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { createCanvas } from "@napi-rs/canvas";
 
 function isSafeDirName(name) {
   return /^[@a-zA-Z0-9_-]+$/.test(name);
@@ -93,13 +96,11 @@ function uniqueSlug(slug, usedSlugs) {
   return unique;
 }
 
-async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
-  const baseSlug = slugify(parse(filename).name);
-  const slug = uniqueSlug(baseSlug, usedSlugs);
+async function optimizeBuffer(buffer, outDir, slug) {
   const avifPath = join(outDir, `${slug}.avif`);
   const webpPath = join(outDir, `${slug}.webp`);
 
-  const img = sharp(srcPath);
+  const img = sharp(buffer);
   const meta = await img.metadata();
   const resized = meta.width > MAX_WIDTH ? img.resize(MAX_WIDTH) : img;
 
@@ -108,19 +109,55 @@ async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
     resized.clone().webp({ quality: WEBP_QUALITY }).toFile(webpPath),
   ]);
 
-  // Verify output before deleting source
   const [avifStat, webpStat] = await Promise.all([stat(avifPath), stat(webpPath)]);
   if (avifStat.size === 0 || webpStat.size === 0) {
-    throw new Error(`Output file is empty, keeping source: ${srcPath}`);
+    throw new Error(`Output file is empty for slug: ${slug}`);
   }
-  await unlink(srcPath);
 
   const outWidth = Math.min(meta.width, MAX_WIDTH);
   const outHeight = meta.width > MAX_WIDTH
     ? Math.round(meta.height * (MAX_WIDTH / meta.width))
     : meta.height;
-  console.log(`  ✓ ${filename} → ${slug}.avif/.webp (${outWidth}×${outHeight})`);
+  return { slug, width: outWidth, height: outHeight };
+}
+
+async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
+  const baseSlug = slugify(parse(filename).name);
+  const slug = uniqueSlug(baseSlug, usedSlugs);
+
+  const buffer = await readFile(srcPath);
+  const result = await optimizeBuffer(buffer, outDir, slug);
+  await unlink(srcPath);
+
+  console.log(`  ✓ ${filename} → ${slug}.avif/.webp (${result.width}×${result.height})`);
   return slug;
+}
+
+const PDF_RENDER_SCALE = 300 / 72; // 300 DPI (PDF base is 72)
+
+async function renderPdfToSlides(pdfPath) {
+  const data = new Uint8Array(await readFile(pdfPath));
+  const standardFontDataUrl = new URL(
+    "../node_modules/pdfjs-dist/standard_fonts/",
+    import.meta.url
+  ).href;
+  const pdf = await getDocument({ data, useSystemFonts: true, standardFontDataUrl }).promise;
+  const slides = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
+
+    const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+    const ctx = canvas.getContext("2d");
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    slides.push(canvas.toBuffer("image/png"));
+    page.cleanup();
+  }
+
+  pdf.destroy();
+  return slides;
 }
 
 // --- Step 1: Process inbox ---
@@ -234,6 +271,62 @@ async function processInbox() {
         try { await rmdir(carouselDir); } catch (e) {
           if (e.code !== "ENOTEMPTY" && e.code !== "ENOENT") console.warn(`  ⚠ Could not remove ${carouselDir}: ${e.message}`);
         }
+      }
+
+      // Process @-prefixed PDF files as carousels
+      const pdfFiles = catEntries.filter(
+        (e) => e.isFile() && e.name.startsWith("@") && /\.pdf$/i.test(e.name)
+      );
+
+      for (const pdfEntry of pdfFiles) {
+        const pdfName = pdfEntry.name;
+        const carouselSlug = slugify(pdfName.slice(1, -4)); // remove @ prefix and .pdf
+
+        // Check collision with @-folder carousel of the same name
+        const matchingDir = subDirs.find(
+          (d) => d.name.startsWith("@") && slugify(d.name.slice(1)) === carouselSlug
+        );
+        if (matchingDir) {
+          console.warn(`  ⚠ ${cat}/${pdfName} — slug "${carouselSlug}" conflicts with ${matchingDir.name}/, skipped`);
+          continue;
+        }
+
+        // Check collision with existing carousel in assets
+        const outDir = join(IMAGES_ROOT, projectId, cat, carouselSlug);
+        if (await dirExists(outDir)) {
+          const existing = (await readdir(outDir)).filter((f) => f.endsWith(".avif"));
+          if (existing.length > 0) {
+            console.warn(`  ⚠ ${cat}/${pdfName} — carousel "${carouselSlug}" already exists in assets, skipped`);
+            continue;
+          }
+        }
+
+        const pdfPath = join(srcDir, pdfName);
+        let slideBuffers;
+        try {
+          slideBuffers = await renderPdfToSlides(pdfPath);
+        } catch (e) {
+          console.warn(`  ⚠ ${cat}/${pdfName} — failed to render PDF: ${e.message}`);
+          continue; // leave PDF in inbox
+        }
+
+        if (slideBuffers.length === 0) {
+          console.warn(`  ⚠ ${cat}/${pdfName} — PDF has no pages, skipped`);
+          continue;
+        }
+
+        await mkdir(outDir, { recursive: true });
+        const padWidth = String(slideBuffers.length).length;
+
+        console.log(`  ${cat}/${pdfName} (${slideBuffers.length} pages → ${carouselSlug}/)`);
+        for (let i = 0; i < slideBuffers.length; i++) {
+          const slideName = String(i + 1).padStart(Math.max(2, padWidth), "0");
+          const result = await optimizeBuffer(slideBuffers[i], outDir, slideName);
+          console.log(`    ✓ page ${i + 1} → ${slideName}.avif/.webp (${result.width}×${result.height})`);
+          total++;
+        }
+
+        await unlink(pdfPath);
       }
 
       // Keep category and project folders for future use
