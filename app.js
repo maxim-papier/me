@@ -153,6 +153,17 @@ function renderIndex() {
 
   app.appendChild(bar);
 
+  // Prefetch project pages on hover — by the time user clicks, page is cached
+  bar.addEventListener("pointerenter", (e) => {
+    const link = e.target.closest("a[href]");
+    if (!link || link._prefetched) return;
+    link._prefetched = true;
+    const hint = document.createElement("link");
+    hint.rel = "prefetch";
+    hint.href = link.href;
+    document.head.appendChild(hint);
+  }, true);
+
   // LinkedIn link
   const linkedin = document.createElement("a");
   linkedin.className = "index__footer";
