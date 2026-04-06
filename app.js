@@ -449,7 +449,7 @@ function waitForImages(grid) {
 
   for (const pic of pictures) {
     if (pic.style.display === "none") continue;
-    if (pic.getBoundingClientRect().top >= viewportHeight) break;
+    if (pic.getBoundingClientRect().top >= viewportHeight) continue;
     const img = pic.querySelector("img");
     if (img) {
       img.loading = "eager";
