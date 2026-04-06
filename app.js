@@ -802,6 +802,8 @@ function initLightbox(grid) {
   function onPointerDown(e) {
     if (e.target.closest("button")) return;
     if (slides.length <= 1) return;
+    // Only drag on the image/stage area, not the overlay background
+    if (!e.target.closest(".lightbox__content")) return;
 
     if (dragState === STATE_SETTLING) {
       // Rapid swipe: cancel current transition, force to idle

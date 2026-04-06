@@ -540,6 +540,7 @@ body.page-project :focus-visible {
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.4);
+  background-clip: content-box;
   cursor: pointer;
   padding: 0;
   transition: background var(--transition);
