@@ -376,7 +376,9 @@ async function regenerateData() {
         .sort();
 
       for (const file of looseFiles) {
-        images.push({ slug: parse(file).name, cat });
+        const slug = parse(file).name;
+        const meta = await sharp(join(catPath, file)).metadata();
+        images.push({ slug, cat, w: meta.width, h: meta.height });
       }
 
       // Subdirectories → carousel groups
@@ -393,7 +395,10 @@ async function regenerateData() {
           .sort();
 
         if (slides.length === 0) continue;
-        images.push({ slug: groupName, cat, slides });
+        // w/h from cover (first slide) — only cover matters for masonry grid
+        const coverFile = slides[0] + ".webp";
+        const coverMeta = await sharp(join(groupPath, coverFile)).metadata();
+        images.push({ slug: groupName, cat, slides, w: coverMeta.width, h: coverMeta.height });
       }
     }
 
@@ -420,10 +425,11 @@ async function regenerateData() {
     lines.push(`    },`);
     lines.push(`    images: [`);
     for (const img of p.images) {
+      const dims = `, w: ${img.w}, h: ${img.h}`;
       if (img.slides) {
-        lines.push(`      { slug: ${JSON.stringify(img.slug)}, cat: ${JSON.stringify(img.cat)}, slides: ${JSON.stringify(img.slides)} },`);
+        lines.push(`      { slug: ${JSON.stringify(img.slug)}, cat: ${JSON.stringify(img.cat)}, slides: ${JSON.stringify(img.slides)}${dims} },`);
       } else {
-        lines.push(`      { slug: ${JSON.stringify(img.slug)}, cat: ${JSON.stringify(img.cat)} },`);
+        lines.push(`      { slug: ${JSON.stringify(img.slug)}, cat: ${JSON.stringify(img.cat)}${dims} },`);
       }
     }
     lines.push(`    ],`);

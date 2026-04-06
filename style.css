@@ -289,6 +289,10 @@ body.page-project :focus-visible {
   display: grid;
   grid-template-areas: "stack";
   cursor: pointer;
+  background: var(--color-placeholder, #222);
+  border-radius: 6px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .masonry picture > * {
@@ -345,16 +349,23 @@ body.page-project :focus-visible {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Masonry images: hidden until loaded */
+/* Masonry images: hidden until loaded, scale-in animation */
 .masonry picture {
   opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: scale(0.95);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
 }
 
 .masonry picture.loaded {
   opacity: 1;
-  transform: translateY(0);
+  transform: scale(1);
+}
+
+/* Eager images appear instantly — no animation delay for above-the-fold */
+.masonry picture.eager {
+  opacity: 1;
+  transform: scale(1);
+  transition: none;
 }
 
 /* Lightbox */
@@ -579,9 +590,11 @@ body.page-project :focus-visible {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .masonry picture {
+  .masonry picture,
+  .masonry picture.eager {
     opacity: 1;
     transform: none;
+    transition: none;
   }
 }
 

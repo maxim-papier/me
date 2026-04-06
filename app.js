@@ -400,6 +400,10 @@ function createPicture(img, basePath, grid) {
   imgEl.src = coverWebp;
   imgEl.alt = "";
   imgEl.loading = "lazy";
+  if (img.w && img.h) {
+    imgEl.width = img.w;
+    imgEl.height = img.h;
+  }
   imgEl.onerror = () => {
     picture.remove();
     layoutMasonry(grid);
@@ -422,72 +426,72 @@ function createPicture(img, basePath, grid) {
 
 // --- Shared helpers ---
 
-function waitForImages(grid) {
-  const pictures = grid.querySelectorAll("picture");
+const EAGER_COUNT = 6; // 2 rows × 3 cols on desktop
 
-  // Defer src assignment — store real URLs in data attributes
+function waitForImages(grid) {
+  // Pre-calculate masonry layout from w/h data (one pass, no per-image reflows)
+  layoutMasonry(grid);
+
+  // Mark above-the-fold images as eager (by viewport position, not array index)
+  const viewportHeight = window.innerHeight;
+  const pictures = grid.querySelectorAll("picture");
+  let eagerCount = 0;
+
+  for (const pic of pictures) {
+    if (pic.style.display === "none") continue;
+    if (eagerCount >= EAGER_COUNT) break;
+    const rect = pic.getBoundingClientRect();
+    if (rect.top < viewportHeight) {
+      const img = pic.querySelector("img");
+      if (img) {
+        img.loading = "eager";
+        if (eagerCount === 0) img.fetchPriority = "high";
+      }
+      pic.classList.add("eager");
+      eagerCount++;
+    }
+  }
+
+  // Observe image load for .loaded class (animation trigger)
   pictures.forEach((pic) => {
     const img = pic.querySelector("img");
-    const sources = pic.querySelectorAll("source");
-    if (img) {
-      img.dataset.src = img.src;
-      img.removeAttribute("src");
+    if (!img) return;
+    const onReady = () => pic.classList.add("loaded");
+    if (img.complete && img.naturalHeight > 0) {
+      onReady();
+    } else {
+      img.addEventListener("load", onReady, { once: true });
     }
-    sources.forEach((s) => {
-      s.dataset.srcset = s.srcset;
-      s.removeAttribute("srcset");
-    });
   });
 
-  // Load images as they enter viewport
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const pic = entry.target;
-        const img = pic.querySelector("img");
-        const sources = pic.querySelectorAll("source");
-
-        sources.forEach((s) => {
-          if (s.dataset.srcset) {
-            s.srcset = s.dataset.srcset;
-            delete s.dataset.srcset;
-          }
-        });
-
-        if (img && img.dataset.src) {
-          // Set handler BEFORE src — cached images fire onload synchronously
-          img.addEventListener("load", () => {
-            pic.classList.add("loaded");
-            layoutMasonry(grid);
-          });
-          img.src = img.dataset.src;
-          delete img.dataset.src;
-          // Handle already-complete images (race: loaded before observer fired)
-          if (img.complete && img.naturalHeight > 0) {
-            pic.classList.add("loaded");
-            layoutMasonry(grid);
-          }
-        }
-
-        observer.unobserve(pic);
-      });
-    },
-    { rootMargin: "200px" }
-  );
-
-  pictures.forEach((pic) => observer.observe(pic));
-
-  window.addEventListener("resize", () => layoutMasonry(grid));
+  // Debounced resize handler (200ms)
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => layoutMasonry(grid), 200);
+  });
 }
 
 function layoutMasonry(grid) {
+  const colCount = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+  const columnWidth = grid.offsetWidth / colCount;
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 12;
+
   grid.querySelectorAll("picture").forEach((pic) => {
     if (pic.style.display === "none") return;
     const img = pic.querySelector("img");
     if (!img) return;
-    pic.style.gridRowEnd = "span " + Math.ceil(img.offsetHeight + gap);
+
+    // Pre-calculate from w/h attributes (no offsetHeight needed)
+    const w = img.width;
+    const h = img.height;
+    if (w && h) {
+      const renderedHeight = columnWidth / w * h;
+      pic.style.gridRowEnd = "span " + Math.ceil(renderedHeight + gap);
+    } else {
+      // Fallback for images without dimensions
+      pic.style.gridRowEnd = "span " + Math.ceil(img.offsetHeight + gap);
+    }
   });
 }
 
