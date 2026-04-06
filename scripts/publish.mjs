@@ -133,17 +133,31 @@ async function optimizeImage(srcPath, outDir, filename, usedSlugs) {
   return slug;
 }
 
-const PDF_RENDER_SCALE = 300 / 72; // 300 DPI (PDF base is 72)
+const PDF_RENDER_SCALE = 150 / 72; // 150 DPI — enough for 1400px output with quality headroom
+const MAX_PDF_PAGES = 50;
 
-async function renderPdfToSlides(pdfPath) {
+async function renderPdfToSlides(pdfPath, outDir) {
   const data = new Uint8Array(await readFile(pdfPath));
   const standardFontDataUrl = new URL(
     "../node_modules/pdfjs-dist/standard_fonts/",
     import.meta.url
   ).href;
   const pdf = await getDocument({ data, useSystemFonts: true, standardFontDataUrl }).promise;
-  const slides = [];
 
+  if (pdf.numPages > MAX_PDF_PAGES) {
+    pdf.destroy();
+    throw new Error(`PDF has ${pdf.numPages} pages, limit is ${MAX_PDF_PAGES}`);
+  }
+
+  if (pdf.numPages === 0) {
+    pdf.destroy();
+    return 0;
+  }
+
+  await mkdir(outDir, { recursive: true });
+  const pad = Math.max(2, String(pdf.numPages).length);
+
+  console.log(`  (${pdf.numPages} pages → rendering...)`);
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
@@ -152,12 +166,17 @@ async function renderPdfToSlides(pdfPath) {
     const ctx = canvas.getContext("2d");
 
     await page.render({ canvasContext: ctx, viewport }).promise;
-    slides.push(canvas.toBuffer("image/png"));
+    const buffer = canvas.toBuffer("image/png");
     page.cleanup();
+
+    const slideName = String(i).padStart(pad, "0");
+    const result = await optimizeBuffer(buffer, outDir, slideName);
+    console.log(`    ✓ page ${i} → ${slideName}.avif/.webp (${result.width}×${result.height})`);
   }
 
+  const count = pdf.numPages;
   pdf.destroy();
-  return slides;
+  return count;
 }
 
 // --- Step 1: Process inbox ---
@@ -280,14 +299,10 @@ async function processInbox() {
 
       for (const pdfEntry of pdfFiles) {
         const pdfName = pdfEntry.name;
-        const carouselSlug = slugify(pdfName.slice(1, -4)); // remove @ prefix and .pdf
+        const carouselSlug = slugify(parse(pdfName).name.slice(1)); // remove @ prefix, strip extension
 
-        // Check collision with @-folder carousel of the same name
-        const matchingDir = subDirs.find(
-          (d) => d.name.startsWith("@") && slugify(d.name.slice(1)) === carouselSlug
-        );
-        if (matchingDir) {
-          console.warn(`  ⚠ ${cat}/${pdfName} — slug "${carouselSlug}" conflicts with ${matchingDir.name}/, skipped`);
+        if (!carouselSlug) {
+          console.warn(`  ⚠ ${cat}/${pdfName} — could not derive slug, skipped`);
           continue;
         }
 
@@ -302,30 +317,20 @@ async function processInbox() {
         }
 
         const pdfPath = join(srcDir, pdfName);
-        let slideBuffers;
+        let slideCount;
         try {
-          slideBuffers = await renderPdfToSlides(pdfPath);
+          slideCount = await renderPdfToSlides(pdfPath, outDir);
         } catch (e) {
           console.warn(`  ⚠ ${cat}/${pdfName} — failed to render PDF: ${e.message}`);
           continue; // leave PDF in inbox
         }
 
-        if (slideBuffers.length === 0) {
+        if (slideCount === 0) {
           console.warn(`  ⚠ ${cat}/${pdfName} — PDF has no pages, skipped`);
           continue;
         }
 
-        await mkdir(outDir, { recursive: true });
-        const padWidth = String(slideBuffers.length).length;
-
-        console.log(`  ${cat}/${pdfName} (${slideBuffers.length} pages → ${carouselSlug}/)`);
-        for (let i = 0; i < slideBuffers.length; i++) {
-          const slideName = String(i + 1).padStart(Math.max(2, padWidth), "0");
-          const result = await optimizeBuffer(slideBuffers[i], outDir, slideName);
-          console.log(`    ✓ page ${i + 1} → ${slideName}.avif/.webp (${result.width}×${result.height})`);
-          total++;
-        }
-
+        total += slideCount;
         await unlink(pdfPath);
       }
 
