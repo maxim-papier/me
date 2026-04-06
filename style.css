@@ -289,10 +289,9 @@ body.page-project :focus-visible {
   display: grid;
   grid-template-areas: "stack";
   cursor: pointer;
-  background: var(--color-placeholder, #222);
+  background: var(--color-placeholder, #1a1a1a);
   border-radius: 6px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 300px;
+  overflow: hidden;
 }
 
 .masonry picture > * {

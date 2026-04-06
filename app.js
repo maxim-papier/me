@@ -472,8 +472,21 @@ function waitForImages(grid) {
       onReady();
     } else {
       img.addEventListener("load", onReady, { once: true });
+      img.addEventListener("error", () => {
+        pic.remove();
+        layoutMasonry(grid);
+      }, { once: true });
     }
   });
+
+  // Safety: if images haven't shown after 3s, force them visible
+  setTimeout(() => {
+    pictures.forEach((pic) => {
+      if (!pic.classList.contains("loaded") && !pic.classList.contains("eager")) {
+        pic.classList.add("loaded");
+      }
+    });
+  }, 3000);
 
   // Debounced resize handler (200ms)
   let resizeTimer;
