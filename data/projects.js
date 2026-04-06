@@ -143,6 +143,7 @@ const projects = [
       { slug: "lh-subsc-jan", cat: "social-media" },
       { slug: "lh-subsc-mach26", cat: "social-media" },
       { slug: "lh-subsc-nov", cat: "social-media" },
+      { slug: "lh-carousel", cat: "social-media", slides: ["01","02","03","04","05","06","07"] },
       { slug: "avoid-ibm-cva-surprises-with-an-internal-audit", cat: "yt" },
       { slug: "bm-ela-renewals-why-early-action-gives-you-negotiation-power", cat: "yt" },
       { slug: "cut-ibm-license-costs-with-server-naming-conventions", cat: "yt" },
