@@ -482,9 +482,9 @@ function layoutMasonry(grid) {
     const img = pic.querySelector("img");
     if (!img) return;
 
-    // Pre-calculate from w/h attributes (no offsetHeight needed)
-    const w = img.width;
-    const h = img.height;
+    // Pre-calculate from w/h HTML attributes (not img.width which returns rendered px)
+    const w = parseInt(img.getAttribute("width"));
+    const h = parseInt(img.getAttribute("height"));
     if (w && h) {
       const renderedHeight = columnWidth / w * h;
       pic.style.gridRowEnd = "span " + Math.ceil(renderedHeight + gap);
