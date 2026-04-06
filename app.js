@@ -1,6 +1,7 @@
 const app = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
+const EAGER_COUNT = 6; // 2 rows × 3 cols on desktop — must be before routing (TDZ)
 
 // Reduced motion preference (reactive)
 let prefersReducedMotion = window.matchMedia(
@@ -436,8 +437,6 @@ function createPicture(img, basePath, grid) {
 }
 
 // --- Shared helpers ---
-
-const EAGER_COUNT = 6; // 2 rows × 3 cols on desktop
 
 function waitForImages(grid) {
   // Pre-calculate masonry layout from w/h data (one pass, no per-image reflows)
