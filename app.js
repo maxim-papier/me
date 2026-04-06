@@ -1,7 +1,6 @@
 const app = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
-const EAGER_COUNT = 6; // 2 rows × 3 cols on desktop — must be before routing (TDZ)
 
 // Reduced motion preference (reactive)
 let prefersReducedMotion = window.matchMedia(
@@ -412,6 +411,7 @@ function createPicture(img, basePath, grid) {
   imgEl.src = coverWebp;
   imgEl.alt = "";
   imgEl.loading = "lazy";
+  imgEl.decoding = "async";
   if (img.w && img.h) {
     imgEl.width = img.w;
     imgEl.height = img.h;
@@ -445,25 +445,22 @@ function waitForImages(grid) {
   // Mark above-the-fold images as eager (by viewport position, not array index)
   const viewportHeight = window.innerHeight;
   const pictures = grid.querySelectorAll("picture");
-  let eagerCount = 0;
+  let firstEager = true;
 
   for (const pic of pictures) {
     if (pic.style.display === "none") continue;
-    if (eagerCount >= EAGER_COUNT) break;
-    const rect = pic.getBoundingClientRect();
-    if (rect.top < viewportHeight) {
-      const img = pic.querySelector("img");
-      if (img) {
-        img.loading = "eager";
-        if (eagerCount === 0) img.fetchPriority = "high";
-      }
-      pic.classList.add("eager");
-      eagerCount++;
+    if (pic.getBoundingClientRect().top >= viewportHeight) break;
+    const img = pic.querySelector("img");
+    if (img) {
+      img.loading = "eager";
+      if (firstEager) { img.fetchPriority = "high"; firstEager = false; }
     }
+    pic.classList.add("loaded"); // instant visibility for above-the-fold
   }
 
-  // Observe image load for .loaded class (animation trigger)
+  // Observe image load for .loaded class (animation trigger for lazy images)
   pictures.forEach((pic) => {
+    if (pic.classList.contains("loaded")) return;
     const img = pic.querySelector("img");
     if (!img) return;
     const onReady = () => pic.classList.add("loaded");
@@ -471,23 +468,10 @@ function waitForImages(grid) {
       onReady();
     } else {
       img.addEventListener("load", onReady, { once: true });
-      img.addEventListener("error", () => {
-        pic.remove();
-        layoutMasonry(grid);
-      }, { once: true });
     }
   });
 
-  // Safety: if images haven't shown after 3s, force them visible
-  setTimeout(() => {
-    pictures.forEach((pic) => {
-      if (!pic.classList.contains("loaded") && !pic.classList.contains("eager")) {
-        pic.classList.add("loaded");
-      }
-    });
-  }, 3000);
-
-  // Debounced resize handler (200ms)
+  // Debounced resize handler (200ms) — one-shot, assumes full page reloads
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
@@ -498,23 +482,17 @@ function waitForImages(grid) {
 function layoutMasonry(grid) {
   const colCount = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
   const columnWidth = grid.offsetWidth / colCount;
+  if (columnWidth <= 0) return;
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 12;
 
   grid.querySelectorAll("picture").forEach((pic) => {
     if (pic.style.display === "none") return;
     const img = pic.querySelector("img");
     if (!img) return;
-
-    // Pre-calculate from w/h HTML attributes (not img.width which returns rendered px)
     const w = parseInt(img.getAttribute("width"));
     const h = parseInt(img.getAttribute("height"));
-    if (w && h) {
-      const renderedHeight = columnWidth / w * h;
-      pic.style.gridRowEnd = "span " + Math.ceil(renderedHeight + gap);
-    } else {
-      // Fallback for images without dimensions
-      pic.style.gridRowEnd = "span " + Math.ceil(img.offsetHeight + gap);
-    }
+    if (!w || !h) return;
+    pic.style.gridRowEnd = "span " + Math.ceil(columnWidth / w * h + gap);
   });
 }
 
@@ -664,31 +642,6 @@ function initLightbox(grid) {
     preloadSlide(currentIndex - 1);
   }
 
-  // Set slide directly (no transition) — used for initial open and reduced motion
-  async function setSlideImmediate(index) {
-    const gen = ++loadGen;
-    currentIndex = wrapIndex(index);
-    currentSlide.classList.add("lightbox__slide--loading");
-    setSlideSrc(currentSlide, slides[currentIndex]);
-
-    try {
-      await Promise.race([
-        currentSlide.querySelector("img").decode(),
-        new Promise((_, r) => setTimeout(() => r("timeout"), 100)),
-      ]);
-    } catch { /* show anyway */ }
-    if (gen !== loadGen) return;
-    currentSlide.classList.remove("lightbox__slide--loading");
-
-    // Reset transforms
-    currentSlide.style.transform = "";
-    currentSlide.style.transition = "";
-    incomingSlide.style.transform = "translateX(100%)";
-    clearSlideSrc(incomingSlide);
-
-    updateChrome();
-  }
-
   // --- Drag state machine ---
   const STATE_IDLE = 0;
   const STATE_DRAGGING = 1;
@@ -807,10 +760,13 @@ function initLightbox(grid) {
 
     if (dragState === STATE_SETTLING) {
       // Rapid swipe: cancel current transition, force to idle
-      ++transitionGen;
+      const gen = ++transitionGen;
       forceToIdle();
-      // Delay 1 frame for Safari compositor flush
-      requestAnimationFrame(() => startDrag(e));
+      // Delay 1 frame for Safari compositor flush; guard against new pointer arriving first
+      requestAnimationFrame(() => {
+        if (transitionGen !== gen) return;
+        startDrag(e);
+      });
       return;
     }
 
@@ -1037,7 +993,7 @@ function initLightbox(grid) {
       } catch {}
     } else {
       const webpSource = pic.querySelector("source[type='image/webp']");
-      const srcset = webpSource?.srcset || webpSource?.dataset?.srcset;
+      const srcset = webpSource?.srcset;
       if (srcset) open([srcset.replace(/\.webp$/, "")], 0, pic);
     }
   }

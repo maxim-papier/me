@@ -377,8 +377,8 @@ async function regenerateData() {
 
       for (const file of looseFiles) {
         const slug = parse(file).name;
-        const meta = await sharp(join(catPath, file)).metadata();
-        images.push({ slug, cat, w: meta.width, h: meta.height });
+        const imgMeta = await sharp(join(catPath, file)).metadata();
+        images.push({ slug, cat, w: imgMeta.width, h: imgMeta.height });
       }
 
       // Subdirectories → carousel groups

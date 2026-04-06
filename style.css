@@ -360,13 +360,6 @@ body.page-project :focus-visible {
   transform: scale(1);
 }
 
-/* Eager images appear instantly — no animation delay for above-the-fold */
-.masonry picture.eager {
-  opacity: 1;
-  transform: scale(1);
-  transition: none;
-}
-
 /* Lightbox */
 .lightbox {
   position: fixed;
@@ -615,8 +608,7 @@ body.page-project :focus-visible {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .masonry picture,
-  .masonry picture.eager {
+  .masonry picture {
     opacity: 1;
     transform: none;
     transition: none;
