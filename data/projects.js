@@ -77,6 +77,7 @@ const projects = [
       { slug: "microsoft-slashed-ea-discounts-for-large-organisations", cat: "yt" },
       { slug: "reduce-spla-costs-by-30", cat: "yt" },
       { slug: "spla-audit-readiness-building-a-fortress-of-compliance", cat: "yt" },
+      { slug: "spla-automation-why-tools-alone-don-t-work", cat: "yt" },
       { slug: "taming-your-azure-bill-cost-control-that-actually-works", cat: "yt" },
       { slug: "the-real-cost-of-agentic-ai-microsoft-copilot-licensing-direction", cat: "yt" },
       { slug: "turning-ea-renewals-into-strategic-power-plays", cat: "yt" },
