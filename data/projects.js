@@ -126,6 +126,7 @@ const projects = [
       { slug: "ibm-licensing-vs-oracle-licensing-what-your-organization-needs-to-know", cat: "articles", w: 1400, h: 788 },
       { slug: "ibm-passport-advantage-explained", cat: "articles", w: 1400, h: 788 },
       { slug: "ibm-saas-licensing-7-costly-mistakes-and-how-to-avoid-them", cat: "articles", w: 1400, h: 788 },
+      { slug: "ibm-says-your-mainframe-hardware-is-end-of-life-challenge-it", cat: "articles", w: 1400, h: 788 },
       { slug: "licensehawk-ibm-internal-audit-success-story", cat: "articles", w: 1280, h: 720 },
       { slug: "microsoft-enterprise-agreement-ea-renewal", cat: "articles", w: 1400, h: 700 },
       { slug: "navigating-ibm-licensing-models", cat: "articles", w: 1280, h: 720 },
