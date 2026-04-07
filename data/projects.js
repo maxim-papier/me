@@ -175,6 +175,7 @@ const projects = [
       { slug: "brc-welcome-to-the-team-ian", cat: "social-media", w: 1400, h: 1400 },
       { slug: "brc-welcome-to-the-team-rosemary", cat: "social-media", w: 1400, h: 1400 },
       { slug: "director-of-it", cat: "social-media", w: 1400, h: 1400 },
+      { slug: "dtx-manchester", cat: "social-media", w: 1400, h: 732 },
       { slug: "episode-112-24", cat: "social-media", w: 1400, h: 1401 },
       { slug: "episode-113", cat: "social-media", w: 1400, h: 1401 },
       { slug: "episode-114-5", cat: "social-media", w: 1400, h: 1401 },
