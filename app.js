@@ -211,41 +211,65 @@ function renderAll() {
   backLink.innerHTML = "&larr; Back";
   header.appendChild(backLink);
 
-  // Filters: All | projects... | categories...
+  // Filters: All | categories... | projects...
   const nav = document.createElement("nav");
   nav.className = "filter";
+
+  // Category group (work types + All)
+  const catGroup = document.createElement("div");
+  catGroup.className = "filter-group";
+  const catLabel = document.createElement("span");
+  catLabel.className = "filter-label";
+  catLabel.textContent = "Work";
+  catGroup.appendChild(catLabel);
+
+  const catChips = document.createElement("div");
+  catChips.className = "filter-chips";
 
   const allBtn = document.createElement("button");
   allBtn.className = "filter-btn active";
   allBtn.dataset.filter = "all";
   allBtn.dataset.filterType = "all";
   allBtn.textContent = "All";
-  nav.appendChild(allBtn);
+  catChips.appendChild(allBtn);
 
-  // Project filters
-  for (const [id, name] of Object.entries(projectMap)) {
-    const btn = document.createElement("button");
-    btn.className = "filter-btn";
-    btn.dataset.filter = id;
-    btn.dataset.filterType = "project";
-    btn.textContent = name;
-    nav.appendChild(btn);
-  }
-
-  // Separator
-  const sep = document.createElement("span");
-  sep.className = "filter-sep";
-  nav.appendChild(sep);
-
-  // Category filters
   for (const [key, label] of Object.entries(categoryMap)) {
     const btn = document.createElement("button");
     btn.className = "filter-btn";
     btn.dataset.filter = key;
     btn.dataset.filterType = "category";
     btn.textContent = label;
-    nav.appendChild(btn);
+    catChips.appendChild(btn);
   }
+  catGroup.appendChild(catChips);
+  nav.appendChild(catGroup);
+
+  // Separator
+  const sep = document.createElement("span");
+  sep.className = "filter-sep";
+  nav.appendChild(sep);
+
+  // Project group (brands)
+  const projGroup = document.createElement("div");
+  projGroup.className = "filter-group";
+  const projLabel = document.createElement("span");
+  projLabel.className = "filter-label";
+  projLabel.textContent = "Brand";
+  projGroup.appendChild(projLabel);
+
+  const projChips = document.createElement("div");
+  projChips.className = "filter-chips";
+
+  for (const [id, name] of Object.entries(projectMap)) {
+    const btn = document.createElement("button");
+    btn.className = "filter-btn";
+    btn.dataset.filter = id;
+    btn.dataset.filterType = "project";
+    btn.textContent = name;
+    projChips.appendChild(btn);
+  }
+  projGroup.appendChild(projChips);
+  nav.appendChild(projGroup);
 
   header.appendChild(nav);
   app.before(header);
