@@ -230,7 +230,7 @@ body.page-project :focus-visible {
 /* Filter */
 .filter {
   display: flex;
-  gap: 32px;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -266,7 +266,6 @@ body.page-project :focus-visible {
   color: #000;
   background: var(--color-accent);
   border-color: var(--color-accent);
-  padding: 6px 20px;
 }
 
 .filter-group {
@@ -298,7 +297,7 @@ body.page-project :focus-visible {
   width: 1px;
   align-self: stretch;
   background: #333;
-  margin: 4px 0;
+  margin: 4px 12px;
   flex-shrink: 0;
 }
 
