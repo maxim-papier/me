@@ -205,6 +205,7 @@ const projects = [
       { slug: "episode-128-yt", cat: "yt", w: 1400, h: 788 },
       { slug: "episode-129-yt", cat: "yt", w: 1400, h: 788 },
       { slug: "episode-130-yt", cat: "yt", w: 1400, h: 788 },
+      { slug: "episode-131-yt", cat: "yt", w: 1400, h: 788 },
       { slug: "yt-episode-118", cat: "yt", w: 1400, h: 788 },
       { slug: "yt-episode-119", cat: "yt", w: 1400, h: 788 },
       { slug: "yt-episode-121-23", cat: "yt", w: 1400, h: 788 },
