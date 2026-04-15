@@ -144,6 +144,7 @@ const projects = [
       { slug: "lh-subsc-jan", cat: "social-media", w: 1400, h: 788 },
       { slug: "lh-subsc-mach26", cat: "social-media", w: 1400, h: 788 },
       { slug: "lh-subsc-nov", cat: "social-media", w: 1400, h: 788 },
+      { slug: "microsoft-product-terms-update-april-2016", cat: "social-media", w: 1400, h: 1400 },
       { slug: "case-studies-pdf", cat: "social-media", slides: ["01","02","03","04","05","06","07","08","09"], w: 1400, h: 1477 },
       { slug: "lh-carousel", cat: "social-media", slides: ["01","02","03","04","05","06","07"], w: 1400, h: 1400 },
       { slug: "avoid-ibm-cva-surprises-with-an-internal-audit", cat: "yt", w: 1400, h: 788 },
