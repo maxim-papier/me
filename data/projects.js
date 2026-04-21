@@ -195,6 +195,7 @@ const projects = [
       { slug: "episode-127-li", cat: "social-media", w: 1400, h: 1401 },
       { slug: "episode-128-li", cat: "social-media", w: 1400, h: 1401 },
       { slug: "episode-129-li-innovation-trust-and-the-itsm-churn-cycle", cat: "social-media", w: 1400, h: 1401 },
+      { slug: "episode-132", cat: "social-media", w: 1400, h: 1401 },
       { slug: "frame-8", cat: "social-media", w: 1400, h: 1400 },
       { slug: "free-consultancy-on-sit25", cat: "social-media", w: 1400, h: 1400 },
       { slug: "itil-16", cat: "social-media", w: 1400, h: 1400 },
