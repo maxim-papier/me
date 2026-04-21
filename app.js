@@ -406,33 +406,37 @@ function createPicture(img, basePath, grid) {
   picture.dataset.slug = img.slug;
 
   const isCarousel = img.slides && img.slides.length > 1;
-  let coverAvif, coverWebp;
+  let coverBase; // path without extension — used to build srcset with size variants
 
   if (img.slides) {
     // Carousel: cover = first slide inside subfolder
-    coverAvif = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.avif`;
-    coverWebp = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}.webp`;
-    // Store slide base paths for lightbox (without extension)
+    coverBase = `${basePath}/${img.cat}/${img.slug}/${img.slides[0]}`;
+    // Store slide base paths for lightbox (without extension, 1400w base only)
     picture.dataset.group = img.slug;
     picture.dataset.slides = JSON.stringify(
       img.slides.map((s) => `${basePath}/${img.cat}/${img.slug}/${s}`)
     );
   } else {
     // Single image
-    coverAvif = `${basePath}/${img.cat}/${img.slug}.avif`;
-    coverWebp = `${basePath}/${img.cat}/${img.slug}.webp`;
+    coverBase = `${basePath}/${img.cat}/${img.slug}`;
   }
 
+  // Size variants mirror publish.mjs THUMB_WIDTHS: 800w, plus 1400w base (no suffix).
+  // sizes mirrors style.css breakpoints: 1-col ≤600px, 2-col 601–1200px, 3-col ≥1201px.
+  const sizes = "(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 33vw";
+
   const sourceAvif = document.createElement("source");
-  sourceAvif.srcset = coverAvif;
+  sourceAvif.srcset = `${coverBase}-800.avif 800w, ${coverBase}.avif 1400w`;
+  sourceAvif.sizes = sizes;
   sourceAvif.type = "image/avif";
 
   const sourceWebp = document.createElement("source");
-  sourceWebp.srcset = coverWebp;
+  sourceWebp.srcset = `${coverBase}-800.webp 800w, ${coverBase}.webp 1400w`;
+  sourceWebp.sizes = sizes;
   sourceWebp.type = "image/webp";
 
   const imgEl = document.createElement("img");
-  imgEl.src = coverWebp;
+  imgEl.src = `${coverBase}.webp`; // 1400w fallback for browsers that ignore srcset
   imgEl.alt = "";
   imgEl.loading = "lazy";
   imgEl.decoding = "async";

@@ -25,6 +25,8 @@ const INBOX = "inbox";
 const IMAGES_ROOT = "assets/images";
 const DATA_FILE = "data/projects.js";
 const MAX_WIDTH = 1400;
+const THUMB_WIDTHS = [800];
+const SIZE_SUFFIX_RE = new RegExp(`-(?:${THUMB_WIDTHS.join("|")})\\.(?:avif|webp)$`);
 const AVIF_QUALITY = 65;
 const WEBP_QUALITY = 75;
 
@@ -97,18 +99,36 @@ function uniqueSlug(slug, usedSlugs) {
 }
 
 async function optimizeBuffer(buffer, outDir, slug) {
+  const pipeline = sharp(buffer);
+  const meta = await pipeline.metadata();
+  if (!meta.width || !meta.height) {
+    throw new Error(`Cannot read dimensions for slug: ${slug}`);
+  }
+
+  // Always generate base (capped at MAX_WIDTH via withoutEnlargement); thumbs only if smaller than source
+  const widths = [MAX_WIDTH, ...THUMB_WIDTHS.filter((w) => w < meta.width)];
+
+  const tasks = [];
+  for (const w of widths) {
+    const suffix = w === MAX_WIDTH ? "" : `-${w}`;
+    tasks.push(
+      pipeline.clone()
+        .resize({ width: w, withoutEnlargement: true })
+        .avif({ quality: AVIF_QUALITY })
+        .toFile(join(outDir, `${slug}${suffix}.avif`))
+    );
+    tasks.push(
+      pipeline.clone()
+        .resize({ width: w, withoutEnlargement: true })
+        .webp({ quality: WEBP_QUALITY })
+        .toFile(join(outDir, `${slug}${suffix}.webp`))
+    );
+  }
+  await Promise.all(tasks);
+
+  // Verify base outputs are non-empty
   const avifPath = join(outDir, `${slug}.avif`);
   const webpPath = join(outDir, `${slug}.webp`);
-
-  const img = sharp(buffer);
-  const meta = await img.metadata();
-  const resized = meta.width > MAX_WIDTH ? img.resize(MAX_WIDTH) : img;
-
-  await Promise.all([
-    resized.clone().avif({ quality: AVIF_QUALITY }).toFile(avifPath),
-    resized.clone().webp({ quality: WEBP_QUALITY }).toFile(webpPath),
-  ]);
-
   const [avifStat, webpStat] = await Promise.all([stat(avifPath), stat(webpPath)]);
   if (avifStat.size === 0 || webpStat.size === 0) {
     throw new Error(`Output file is empty for slug: ${slug}`);
@@ -341,6 +361,74 @@ async function processInbox() {
   return { total, newProjects, newCategories };
 }
 
+// --- Step 1.5: Backfill missing thumb variants ---
+
+async function walkBaseAvifs(root) {
+  const result = [];
+  async function recurse(dir) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await recurse(p);
+      } else if (
+        entry.isFile() &&
+        entry.name.endsWith(".avif") &&
+        !SIZE_SUFFIX_RE.test(entry.name)
+      ) {
+        result.push(p);
+      }
+    }
+  }
+  await recurse(root);
+  return result;
+}
+
+async function ensureBackfill() {
+  if (!(await dirExists(IMAGES_ROOT))) return;
+
+  const baseAvifs = await walkBaseAvifs(IMAGES_ROOT);
+  let generated = 0;
+
+  for (const basePath of baseAvifs) {
+    for (const w of THUMB_WIDTHS) {
+      const avifThumb = basePath.replace(/\.avif$/, `-${w}.avif`);
+      const webpThumb = basePath.replace(/\.avif$/, `-${w}.webp`);
+
+      let bothExist = false;
+      try {
+        await Promise.all([stat(avifThumb), stat(webpThumb)]);
+        bothExist = true;
+      } catch {
+        // at least one missing — generate below
+      }
+      if (bothExist) continue;
+
+      const buffer = await readFile(basePath);
+      const meta = await sharp(buffer).metadata();
+      if (!meta.width || meta.width <= w) continue;
+
+      await Promise.all([
+        sharp(buffer)
+          .resize({ width: w, withoutEnlargement: true })
+          .avif({ quality: AVIF_QUALITY })
+          .toFile(avifThumb),
+        sharp(buffer)
+          .resize({ width: w, withoutEnlargement: true })
+          .webp({ quality: WEBP_QUALITY })
+          .toFile(webpThumb),
+      ]);
+
+      console.log(`  ✓ backfill: ${basePath} → -${w} variants`);
+      generated++;
+    }
+  }
+
+  if (generated > 0) {
+    console.log(`\nBackfilled ${generated} thumb variant(s).`);
+  }
+}
+
 // --- Step 2: Regenerate data/projects.js from filesystem ---
 
 async function regenerateData() {
@@ -369,9 +457,9 @@ async function regenerateData() {
       const catPath = join(projectDir, cat);
       const catEntries = await readdir(catPath, { withFileTypes: true });
 
-      // Loose .webp files → single images
+      // Loose .webp files → single images (exclude thumb variants like -800.webp)
       const looseFiles = catEntries
-        .filter((e) => e.isFile() && e.name.endsWith(".webp"))
+        .filter((e) => e.isFile() && e.name.endsWith(".webp") && !SIZE_SUFFIX_RE.test(e.name))
         .map((e) => e.name)
         .sort();
 
@@ -390,7 +478,7 @@ async function regenerateData() {
       for (const groupName of groupDirs) {
         const groupPath = join(catPath, groupName);
         const slides = (await readdir(groupPath))
-          .filter((f) => f.endsWith(".webp"))
+          .filter((f) => f.endsWith(".webp") && !SIZE_SUFFIX_RE.test(f))
           .map((f) => parse(f).name)
           .sort();
 
@@ -454,6 +542,10 @@ async function cacheBustHTML() {
       /src="data\/projects\.js[^"]*"/,
       `src="data/projects.js?${version}"`
     );
+    html = html.replace(
+      /src="app\.js[^"]*"/,
+      `src="app.js?${version}"`
+    );
     await writeFile(file, html);
   }
   console.log(`✓ Cache-busted HTML files (${version})`);
@@ -467,6 +559,7 @@ if (optimized > 0) {
   console.log(`\nOptimized ${optimized} new images.`);
 }
 
+await ensureBackfill();
 await regenerateData();
 await cacheBustHTML();
 
