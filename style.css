@@ -683,3 +683,128 @@ body.page-project :focus-visible {
     height: 10px;
   }
 }
+
+/* --- Admin curation mode --- */
+
+/* Liked: yellow accent outline around the card */
+.masonry picture[data-flag="liked"] {
+  outline: 3px solid var(--color-accent);
+  outline-offset: -3px;
+}
+
+/* Hidden: dimmed + desaturated + diagonal hatch overlay */
+.masonry picture[data-flag="hidden"] {
+  opacity: 0.45;
+  filter: saturate(0.3);
+}
+
+.masonry picture[data-flag="hidden"]::after {
+  content: "";
+  grid-area: stack;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 0, 0, 0.12),
+    rgba(255, 0, 0, 0.12) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Hover overlay: Like / Hide buttons — top-left (avoids slide-badge at top-right) */
+.admin-overlay {
+  place-self: start start;
+  margin: 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 1; /* Touch default — overlay always visible */
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+/* On hover-capable devices, hide until hover to avoid sticky-touch bug
+   (see docs/solutions/ui-bugs/hover-sticky-state-on-touch-devices.md) */
+@media (hover: hover) {
+  .admin-overlay { opacity: 0; }
+  .masonry picture:hover .admin-overlay { opacity: 1; }
+}
+
+.admin-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.admin-btn:hover { transform: scale(1.08); }
+
+.masonry picture[data-flag="liked"] .admin-btn--like {
+  background: var(--color-accent);
+  color: var(--color-text);
+}
+.masonry picture[data-flag="hidden"] .admin-btn--hide {
+  background: #ff5050;
+  color: white;
+}
+
+/* Admin bottom bar — z-index below lightbox (.lightbox uses 100).
+   Also added to setBackgroundInert selector so it becomes inert when lightbox is open. */
+.admin-bar {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-text);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 40;
+  font-size: 13px;
+}
+
+.admin-bar__indicator {
+  opacity: 0.6;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-bar__indicator--dirty {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.admin-bar__btn {
+  background: #fff;
+  color: var(--color-text);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  transition: transform 0.15s ease;
+}
+
+.admin-bar__btn--danger {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.admin-bar__btn:hover { transform: translateY(-1px); }
+

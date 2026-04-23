@@ -1,6 +1,7 @@
 const app = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("id");
+const adminMode = params.get("edit") === "1";
 
 // Reduced motion preference (reactive)
 let prefersReducedMotion = window.matchMedia(
@@ -72,6 +73,222 @@ function springAnimate({ from, to, velocity = 0, stiffness = 200, damping = 20, 
 
 function rubberBand(offset, dimension) {
   return (1 - 1 / ((offset * 0.55) / dimension + 1)) * dimension;
+}
+
+// --- Curation flags (admin-only liked/hidden state) ---
+// Snapshot model: localStorage holds a full map, not a diff. On first entry
+// into admin mode, seed from published flags. All edits are absolute.
+
+const LS_KEY = "portfolio:flags";
+
+function getPublishedFlags() {
+  return (typeof flags === "object" && flags) ? flags : {};
+}
+
+function loadLocalSnapshot() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw == null) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalSnapshot(obj) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(obj));
+  } catch (e) {
+    console.error("localStorage full or unavailable", e);
+  }
+  updateUnsavedIndicator();
+}
+
+function clearLocalSnapshot() {
+  localStorage.removeItem(LS_KEY);
+  updateUnsavedIndicator();
+}
+
+// Single source of active flags. Public: published only. Admin: localStorage
+// (seeded from published on first entry).
+function activeFlags() {
+  if (!adminMode) return getPublishedFlags();
+  const local = loadLocalSnapshot();
+  if (local !== null) return local;
+  const seeded = { ...getPublishedFlags() };
+  saveLocalSnapshot(seeded);
+  return seeded;
+}
+
+function keyFor(projectId, cat, slug) {
+  return `${projectId}/${cat}/${slug}`;
+}
+
+function writeFlag(current, key, newState) {
+  const next = { ...current };
+  if (newState === "normal") delete next[key];
+  else next[key] = newState;
+  saveLocalSnapshot(next);
+  return next;
+}
+
+function isDirty() {
+  const local = loadLocalSnapshot();
+  if (local === null) return false;
+  const pub = getPublishedFlags();
+  const keys = new Set([...Object.keys(local), ...Object.keys(pub)]);
+  for (const k of keys) if (local[k] !== pub[k]) return true;
+  return false;
+}
+
+// Admin overlay template — built once, cloned per picture
+const _adminOverlayTemplate = (() => {
+  const t = document.createElement("template");
+  t.innerHTML = `
+    <div class="admin-overlay">
+      <button class="admin-btn admin-btn--like" data-action="like" aria-label="Toggle like">♡</button>
+      <button class="admin-btn admin-btn--hide" data-action="hide" aria-label="Toggle hide">✕</button>
+    </div>
+  `.trim();
+  return t;
+})();
+
+function adminOverlayClone() {
+  return _adminOverlayTemplate.content.firstElementChild.cloneNode(true);
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Wires admin UI (grid click handler, cross-tab sync, admin-bar) into the current render.
+// Safe no-op outside admin mode. Called once per render from renderAll / renderProject / renderIndex.
+function initAdminMode(grid) {
+  if (!adminMode) return;
+
+  if (grid) {
+    // Capture-phase listener runs BEFORE the existing grid click that opens lightbox
+    grid.addEventListener("click", (e) => {
+      const btn = e.target.closest(".admin-btn");
+      if (!btn) return;
+      e.stopPropagation();
+      const picture = btn.closest("picture");
+      const action = btn.dataset.action;
+      const key = keyFor(picture.dataset.project, picture.dataset.cat, picture.dataset.slug);
+      const current = picture.dataset.flag || "normal";
+      const next = (action === "like")
+        ? (current === "liked" ? "normal" : "liked")
+        : (current === "hidden" ? "normal" : "hidden");
+
+      const active = activeFlags();
+      writeFlag(active, key, next);
+
+      if (next === "normal") picture.removeAttribute("data-flag");
+      else picture.dataset.flag = next;
+    }, true);
+
+    // Cross-tab sync — rescue from silent data loss when two admin tabs are open.
+    window.addEventListener("storage", (e) => {
+      if (e.key !== LS_KEY) return;
+      const map = activeFlags();
+      grid.querySelectorAll("picture").forEach((pic) => {
+        const key = keyFor(pic.dataset.project, pic.dataset.cat, pic.dataset.slug);
+        const state = map[key];
+        if (state === "liked" || state === "hidden") pic.dataset.flag = state;
+        else pic.removeAttribute("data-flag");
+      });
+      updateUnsavedIndicator();
+    });
+  }
+
+  renderAdminBar();
+  preserveAdminInLinks();
+}
+
+function renderAdminBar() {
+  // Idempotent — remove any existing bar before re-rendering
+  document.querySelector(".admin-bar")?.remove();
+
+  const bar = document.createElement("div");
+  bar.className = "admin-bar";
+  bar.innerHTML = `
+    <span class="admin-bar__indicator" id="admin-indicator"></span>
+    <button class="admin-bar__btn" id="admin-export">Export flags</button>
+    <button class="admin-bar__btn admin-bar__btn--danger" id="admin-reset">Reset to published</button>
+  `;
+  document.body.appendChild(bar);
+
+  document.getElementById("admin-export").addEventListener("click", exportFlags);
+  document.getElementById("admin-reset").addEventListener("click", resetLocalFlags);
+  updateUnsavedIndicator();
+}
+
+function exportFlags() {
+  const snapshot = loadLocalSnapshot() ?? getPublishedFlags();
+  const out = {};
+  for (const [k, v] of Object.entries(snapshot)) {
+    if (v === "liked" || v === "hidden") out[k] = v;
+  }
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "flags.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// No confirm — solo-user tool; extra click per use is friction without value.
+function resetLocalFlags() {
+  clearLocalSnapshot();
+  location.reload();
+}
+
+function updateUnsavedIndicator() {
+  const indicator = document.getElementById("admin-indicator");
+  if (!indicator) return;
+  const dirty = isDirty();
+  indicator.textContent = dirty ? "unsaved" : "saved";
+  indicator.classList.toggle("admin-bar__indicator--dirty", dirty);
+}
+
+// Propagate ?edit=1 through internal links so navigating to another page keeps admin mode on.
+function preserveAdminInLinks() {
+  if (!adminMode) return;
+  document.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href) return;
+    if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("//")) return;
+    if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+    if (href.includes("edit=1")) return;
+    const sep = href.includes("?") ? "&" : "?";
+    a.setAttribute("href", href + sep + "edit=1");
+  });
+}
+
+// Public: filter hidden, partition [liked, normal], shuffle each, concat.
+// Admin: return images shuffled (preserves existing "fresh on every load" feel, no filter).
+// Images may carry img.projectId (renderAll) or inherit defaultProjectId (renderProject).
+function applyCuration(images, defaultProjectId, flagsMap) {
+  if (adminMode) {
+    return { images: shuffleInPlace(images.slice()), stateByKey: flagsMap };
+  }
+  const liked = [];
+  const normal = [];
+  for (const img of images) {
+    const pid = img.projectId || defaultProjectId;
+    const state = flagsMap[`${pid}/${img.cat}/${img.slug}`];
+    if (state === "hidden") continue;
+    if (state === "liked") liked.push(img);
+    else normal.push(img);
+  }
+  shuffleInPlace(liked);
+  shuffleInPlace(normal);
+  return { images: liked.concat(normal), stateByKey: flagsMap };
 }
 
 // Determine which page to render
@@ -172,6 +389,8 @@ function renderIndex() {
   linkedin.rel = "noopener";
   linkedin.textContent = "Linkedin";
   app.appendChild(linkedin);
+
+  initAdminMode(null);
 }
 
 // --- All projects page ---
@@ -278,18 +497,14 @@ function renderAll() {
   const grid = document.createElement("main");
   grid.className = "masonry";
 
-  const pictures = allImages.map((img) => {
-    const basePath = `assets/images/${img.projectId}`;
-    const picture = createPicture(img, basePath, grid);
-    picture.dataset.project = img.projectId;
-    return picture;
-  });
+  // Curation: applyCuration handles hidden filter, liked-tier promotion, and shuffle-within-tier
+  const flagsMap = activeFlags();
+  const { images: curatedImages } = applyCuration(allImages, null, flagsMap);
 
-  // Shuffle
-  for (let i = pictures.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pictures[i], pictures[j]] = [pictures[j], pictures[i]];
-  }
+  const pictures = curatedImages.map((img) => {
+    const basePath = `assets/images/${img.projectId}`;
+    return createPicture(img, basePath, grid, img.projectId, flagsMap);
+  });
 
   pictures.forEach((pic, i) => {
     pic.style.setProperty("--i", i);
@@ -320,6 +535,7 @@ function renderAll() {
   app.replaceWith(grid);
   waitForImages(grid);
   initLightbox(grid);
+  initAdminMode(grid);
 }
 
 // --- Single project page ---
@@ -379,14 +595,12 @@ function renderProject(project) {
   grid.className = "masonry";
 
   const basePath = `assets/images/${project.id}`;
-  const pictures = project.images.map((img) =>
-    createPicture(img, basePath, grid)
-  );
+  const flagsMap = activeFlags();
+  const { images: curatedImages } = applyCuration(project.images, project.id, flagsMap);
 
-  for (let i = pictures.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pictures[i], pictures[j]] = [pictures[j], pictures[i]];
-  }
+  const pictures = curatedImages.map((img) =>
+    createPicture(img, basePath, grid, project.id, flagsMap)
+  );
 
   pictures.forEach((pic, i) => {
     pic.style.setProperty("--i", i);
@@ -396,14 +610,21 @@ function renderProject(project) {
   app.replaceWith(grid);
   waitForImages(grid);
   initLightbox(grid);
+  initAdminMode(grid);
 }
 
 // --- Picture element factory ---
 
-function createPicture(img, basePath, grid) {
+function createPicture(img, basePath, grid, projectId, flagsMap) {
   const picture = document.createElement("picture");
   picture.dataset.cat = img.cat;
   picture.dataset.slug = img.slug;
+  picture.dataset.project = projectId;
+
+  if (adminMode && flagsMap) {
+    const state = flagsMap[`${projectId}/${img.cat}/${img.slug}`];
+    if (state === "liked" || state === "hidden") picture.dataset.flag = state;
+  }
 
   const isCarousel = img.slides && img.slides.length > 1;
   let coverBase; // path without extension — used to build srcset with size variants
@@ -459,6 +680,10 @@ function createPicture(img, basePath, grid) {
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="13" height="20" rx="2"/><path d="M19 4v16"/><path d="M22 7v10"/></svg> ' +
       img.slides.length;
     picture.appendChild(badge);
+  }
+
+  if (adminMode) {
+    picture.appendChild(adminOverlayClone());
   }
 
   return picture;
@@ -950,8 +1175,10 @@ function initLightbox(grid) {
   }
 
   function setBackgroundInert(inert) {
+    // .admin-bar is included so L/X keydown doesn't shadow focus when an admin-bar
+    // button had focus before the lightbox opened.
     document
-      .querySelectorAll(".masonry, .project-header, #app")
+      .querySelectorAll(".masonry, .project-header, #app, .admin-bar")
       .forEach((el) => {
         if (inert) el.setAttribute("inert", "");
         else el.removeAttribute("inert");
@@ -1032,7 +1259,7 @@ function initLightbox(grid) {
     overlay.classList.remove("lightbox--open");
     document.body.style.overflow = "";
     setBackgroundInert(false);
-    triggerEl?.focus();
+    if (triggerEl?.isConnected) triggerEl.focus();
     // Deep link: clear hash
     if (location.hash.startsWith("#img=")) {
       history.replaceState(null, "", location.pathname + location.search);
@@ -1071,13 +1298,37 @@ function initLightbox(grid) {
 
   document.addEventListener("keydown", (e) => {
     if (!overlay.classList.contains("lightbox--open")) return;
+
     if (e.key === "Escape") {
       // Prevent browser from exiting fullscreen — close lightbox first
       e.preventDefault();
       close();
+      return;
     }
-    if (e.key === "ArrowLeft") goTo(currentIndex - 1);
-    if (e.key === "ArrowRight") goTo(currentIndex + 1);
+    if (e.key === "ArrowLeft") { goTo(currentIndex - 1); return; }
+    if (e.key === "ArrowRight") { goTo(currentIndex + 1); return; }
+
+    // Admin curation shortcuts — only when ?edit=1 active, lightbox has a trigger,
+    // drag state machine is idle, and target isn't an editable input.
+    if (!adminMode || !triggerEl) return;
+    if (dragState !== STATE_IDLE) return;
+    if (e.target.isContentEditable || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    const k = e.key.toLowerCase();
+    if (k !== "l" && k !== "x") return;
+
+    e.preventDefault();
+    const key = keyFor(triggerEl.dataset.project, triggerEl.dataset.cat, triggerEl.dataset.slug);
+    const current = triggerEl.dataset.flag || "normal";
+    const next = (k === "l")
+      ? (current === "liked" ? "normal" : "liked")
+      : (current === "hidden" ? "normal" : "hidden");
+
+    const active = activeFlags();
+    writeFlag(active, key, next);
+
+    if (next === "normal") triggerEl.removeAttribute("data-flag");
+    else triggerEl.dataset.flag = next;
   });
 
   // Grid click handler
