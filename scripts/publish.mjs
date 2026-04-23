@@ -11,7 +11,7 @@
  * Usage: node scripts/publish.mjs
  */
 
-import { readdir, mkdir, unlink, writeFile, readFile, rmdir, stat } from "node:fs/promises";
+import { readdir, mkdir, unlink, writeFile, readFile, rmdir, rename, stat } from "node:fs/promises";
 import { join, parse } from "node:path";
 import sharp from "sharp";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -29,6 +29,13 @@ const THUMB_WIDTHS = [800];
 const SIZE_SUFFIX_RE = new RegExp(`-(?:${THUMB_WIDTHS.join("|")})\\.(?:avif|webp)$`);
 const AVIF_QUALITY = 65;
 const WEBP_QUALITY = 75;
+
+// Curation flags pipeline
+const INBOX_FLAGS_JSON = join(INBOX, "flags.json");
+const DATA_FLAGS_JSON = "data/flags.json";   // Source of truth
+const DATA_FLAGS_JS = "data/flags.js";        // Browser wrapper
+const ARCHIVE_ROOT = "archive";
+const KEY_SEGMENT = /^[@a-zA-Z0-9_-]+$/;
 
 // Project metadata — edit here to add new projects
 const PROJECT_META = {
@@ -530,6 +537,157 @@ async function regenerateData() {
   console.log(`\n✓ ${DATA_FILE} regenerated (${projectsData.reduce((s, p) => s + p.images.length, 0)} images total)`);
 }
 
+// --- Step 2.5: Curation flags pipeline ---
+
+async function readPublishedFlagsFile() {
+  try {
+    return JSON.parse(await readFile(DATA_FLAGS_JSON, "utf-8"));
+  } catch (e) {
+    if (e.code === "ENOENT") return {};
+    console.warn(`⚠ Could not read ${DATA_FLAGS_JSON}: ${e.message} — starting empty`);
+    return {};
+  }
+}
+
+// Security: validates each segment AND checks projectId/cat against PROJECT_META allowlist.
+// Blocks path-traversal attempts like "node_modules/sharp/build".
+function isValidFlagKey(key) {
+  const parts = key.split("/");
+  if (parts.length !== 3) return false;
+  const [projectId, cat, slug] = parts;
+  if (!KEY_SEGMENT.test(projectId) || !KEY_SEGMENT.test(cat) || !KEY_SEGMENT.test(slug)) return false;
+  const meta = PROJECT_META[projectId];
+  if (!meta) return false;
+  if (!(cat in meta.categoryLabels)) return false;
+  return true;
+}
+
+async function processInboxFlags() {
+  let flags = await readPublishedFlagsFile();
+  let replaced = false;
+
+  try {
+    const raw = await readFile(INBOX_FLAGS_JSON, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("flags.json must be an object");
+    }
+    flags = {};
+    let dropped = 0;
+    for (const [key, val] of Object.entries(parsed)) {
+      if (val !== "liked" && val !== "hidden") { dropped++; continue; }
+      if (!isValidFlagKey(key)) { dropped++; continue; }
+      flags[key] = val;
+    }
+    replaced = true;
+    console.log(`✓ inbox/flags.json → ${Object.keys(flags).length} flags loaded${dropped ? ` (${dropped} invalid entries dropped)` : ""}`);
+  } catch (e) {
+    if (e.code !== "ENOENT") console.warn(`⚠ Could not parse inbox/flags.json: ${e.message} — keeping existing flags`);
+  }
+
+  await archiveHiddenFiles(flags);
+  const cleaned = await dropStaleKeys(flags);
+  await writeFlagsFiles(cleaned);
+
+  if (replaced) await unlink(INBOX_FLAGS_JSON);
+  return cleaned;
+}
+
+async function archiveHiddenFiles(flags) {
+  // Cache directory listings across iterations (fewer syscalls per key)
+  const readdirCache = new Map();
+  async function cachedReaddir(p) {
+    if (readdirCache.has(p)) return readdirCache.get(p);
+    try {
+      const entries = await readdir(p);
+      readdirCache.set(p, entries);
+      return entries;
+    } catch {
+      readdirCache.set(p, null);
+      return null;
+    }
+  }
+
+  for (const [key, state] of Object.entries(flags)) {
+    if (state !== "hidden") continue;
+    const [projectId, cat, slug] = key.split("/");
+    const assetDir = join(IMAGES_ROOT, projectId, cat);
+    const archiveDir = join(ARCHIVE_ROOT, projectId, cat);
+    const thumbRe = new RegExp(`^${slug}-\\d+\\.(avif|webp)$`);
+
+    const entries = await cachedReaddir(assetDir);
+    if (!entries) continue;
+
+    const toMove = entries.filter((f) =>
+      f === `${slug}.avif` || f === `${slug}.webp` || thumbRe.test(f)
+    );
+
+    if (toMove.length > 0) {
+      await mkdir(archiveDir, { recursive: true });
+      for (const f of toMove) {
+        await rename(join(assetDir, f), join(archiveDir, f));
+      }
+      readdirCache.delete(assetDir);
+      console.log(`  📦 archived ${toMove.length} file(s) for ${key}`);
+      continue;
+    }
+
+    // Carousel case — subfolder named slug
+    const subfolder = join(assetDir, slug);
+    try {
+      const s = await stat(subfolder);
+      if (s.isDirectory()) {
+        await mkdir(archiveDir, { recursive: true });
+        await rename(subfolder, join(archiveDir, slug));
+        console.log(`  📦 archived carousel ${key}`);
+      }
+    } catch {
+      // neither single nor carousel — already archived or never existed, skip silently
+    }
+  }
+}
+
+async function dropStaleKeys(flags) {
+  const out = {};
+  for (const [key, state] of Object.entries(flags)) {
+    const [projectId, cat, slug] = key.split("/");
+    const assetDir = join(IMAGES_ROOT, projectId, cat);
+    const archiveDir = join(ARCHIVE_ROOT, projectId, cat);
+
+    const candidates = [
+      join(assetDir, `${slug}.avif`),
+      join(archiveDir, `${slug}.avif`),
+      join(assetDir, slug),
+      join(archiveDir, slug),
+    ];
+
+    let exists = false;
+    for (const p of candidates) {
+      try {
+        await stat(p);
+        exists = true;
+        break;
+      } catch { /* next */ }
+    }
+
+    if (exists) out[key] = state;
+  }
+  const dropped = Object.keys(flags).length - Object.keys(out).length;
+  if (dropped > 0) console.log(`  🧹 dropped ${dropped} stale flag key(s)`);
+  return out;
+}
+
+async function writeFlagsFiles(flags) {
+  await mkdir("data", { recursive: true });
+  const jsonBody = JSON.stringify(flags, null, 2);
+  await writeFile(DATA_FLAGS_JSON, jsonBody);
+  // Defense-in-depth: escape '<' for XSS safety even though keys/values are validated
+  const safeBody = jsonBody.replace(/</g, "\\u003c");
+  const js = `// Auto-generated by scripts/publish.mjs. Do not edit. Source: data/flags.json\nconst flags = ${safeBody};\n`;
+  await writeFile(DATA_FLAGS_JS, js);
+  console.log(`✓ ${DATA_FLAGS_JSON} + ${DATA_FLAGS_JS} regenerated (${Object.keys(flags).length} flags)`);
+}
+
 // --- Step 3: Cache-bust projects.js in HTML files ---
 
 async function cacheBustHTML() {
@@ -541,6 +699,10 @@ async function cacheBustHTML() {
     html = html.replace(
       /src="data\/projects\.js[^"]*"/,
       `src="data/projects.js?${version}"`
+    );
+    html = html.replace(
+      /src="data\/flags\.js[^"]*"/,
+      `src="data/flags.js?${version}"`
     );
     html = html.replace(
       /src="app\.js[^"]*"/,
@@ -559,6 +721,10 @@ if (optimized > 0) {
   console.log(`\nOptimized ${optimized} new images.`);
 }
 
+// Curation flags: archive hidden files BEFORE ensureBackfill/regenerateData so:
+//   (a) backfill doesn't waste work on soon-to-be-archived files
+//   (b) regenerateData naturally omits archived content from data/projects.js
+await processInboxFlags();
 await ensureBackfill();
 await regenerateData();
 await cacheBustHTML();

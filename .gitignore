@@ -2,6 +2,9 @@
 assets/portfolio/
 inbox/
 
+# Local archive of hidden curation files (soft-delete buffer for recovery)
+archive/
+
 # OS
 .DS_Store
 
