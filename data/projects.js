@@ -180,6 +180,7 @@ const projects = [
     },
     images: [
       { slug: "130-spark26-reflections-and-the-road-to-sits", cat: "social-media", w: 1400, h: 1401 },
+      { slug: "brc-newsletter-may", cat: "social-media", w: 1400, h: 788 },
       { slug: "brc-welcome-to-the-team-ian", cat: "social-media", w: 1400, h: 1400 },
       { slug: "brc-welcome-to-the-team-rosemary", cat: "social-media", w: 1400, h: 1400 },
       { slug: "director-of-it", cat: "social-media", w: 1400, h: 1400 },
